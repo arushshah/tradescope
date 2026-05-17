@@ -785,6 +785,25 @@ def test_expand_yfinance_research_bundle_includes_advanced_components() -> None:
     assert "institutional_holders" not in components
     assert "news" not in components
     assert "option_chains" not in components
+    # deprecated in yfinance 1.3+
+    assert "earnings" not in components
+    assert "quarterly_earnings" not in components
+    assert "earnings_dates" in components
+    assert "earnings_history" in components
+
+
+def test_fetch_component_raises_no_data_error_on_none_payload(monkeypatch) -> None:
+    from tradescope.data.yfinance_provider import YFinanceProvider
+    from tradescope.exceptions import NoDataError
+    import unittest.mock as mock
+
+    provider = YFinanceProvider()
+
+    with mock.patch("tradescope.data.yfinance_provider.fetch_component_payload", return_value=None):
+        with mock.patch("yfinance.Ticker"):
+            import pytest
+            with pytest.raises(NoDataError, match="returned no data"):
+                provider.fetch_component("AAPL", "dividends")
 
 
 def test_normalize_component_frame_handles_list_payloads() -> None:
@@ -930,3 +949,158 @@ def test_build_us_listed_sets_end_date_for_delisted(tmp_path) -> None:
     assert len(memberships) == 1
     m = memberships[0]
     assert m.end_date == "2001-12-02"
+
+
+# ---------------------------------------------------------------------------
+# S&P 500 ingestion tests
+# ---------------------------------------------------------------------------
+
+def test_clean_ticker_strips_yyyymm_suffix() -> None:
+    from tradescope.data.sp500 import _clean_ticker
+
+    assert _clean_ticker("AAL-199702") == "AAL"
+    assert _clean_ticker("AAMRQ-201312") == "AAMRQ"
+    assert _clean_ticker("ENRNQ-200411") == "ENRNQ"
+
+
+def test_clean_ticker_preserves_legitimate_hyphens() -> None:
+    from tradescope.data.sp500 import _clean_ticker
+
+    assert _clean_ticker("BRK-B") == "BRK-B"
+    assert _clean_ticker("AAPL") == "AAPL"
+    assert _clean_ticker("BF.B") == "BF.B"
+
+
+def test_build_sp500_memberships_first_row_all_become_members() -> None:
+    from tradescope.data.sp500 import build_sp500_memberships
+
+    changes = pd.DataFrame(
+        {"tickers": ["AAPL,MSFT,GE"]},
+        index=pd.to_datetime(["1996-01-02"]),
+    )
+    changes.index.name = "date"
+
+    memberships = build_sp500_memberships(changes, "2026-01-01")
+
+    symbols = {m.symbol for m in memberships}
+    assert symbols == {"AAPL", "MSFT", "GE"}
+    assert all(m.end_date is None for m in memberships)
+    assert all(m.universe == "sp500" for m in memberships)
+    assert all(m.source == "fja05680/sp500" for m in memberships)
+
+
+def test_build_sp500_memberships_detects_removal() -> None:
+    from tradescope.data.sp500 import build_sp500_memberships
+
+    changes = pd.DataFrame(
+        {"tickers": ["AAPL,MSFT,GE", "AAPL,MSFT"]},
+        index=pd.to_datetime(["1996-01-02", "2001-06-01"]),
+    )
+    changes.index.name = "date"
+
+    memberships = build_sp500_memberships(changes, "2026-01-01")
+
+    ge = next(m for m in memberships if m.symbol == "GE")
+    assert ge.start_date == "1996-01-02"
+    assert ge.end_date == "2001-05-31"  # day before 2001-06-01 removal row
+
+    aapl = next(m for m in memberships if m.symbol == "AAPL")
+    assert aapl.end_date is None  # still in last row
+
+
+def test_build_sp500_memberships_detects_addition() -> None:
+    from tradescope.data.sp500 import build_sp500_memberships
+
+    changes = pd.DataFrame(
+        {"tickers": ["AAPL,MSFT", "AAPL,MSFT,TSLA"]},
+        index=pd.to_datetime(["1996-01-02", "2020-12-21"]),
+    )
+    changes.index.name = "date"
+
+    memberships = build_sp500_memberships(changes, "2026-01-01")
+
+    tsla = next(m for m in memberships if m.symbol == "TSLA")
+    assert tsla.start_date == "2020-12-21"
+    assert tsla.end_date is None
+
+
+def test_build_sp500_memberships_handles_multiple_tenures() -> None:
+    from tradescope.data.sp500 import build_sp500_memberships
+
+    # GE: starts 1996, removed 2018, re-added 2024
+    changes = pd.DataFrame(
+        {
+            "tickers": [
+                "AAPL,GE",
+                "AAPL",
+                "AAPL,GE",
+            ]
+        },
+        index=pd.to_datetime(["1996-01-02", "2018-06-19", "2024-11-01"]),
+    )
+    changes.index.name = "date"
+
+    memberships = build_sp500_memberships(changes, "2026-01-01")
+
+    ge_records = [m for m in memberships if m.symbol == "GE"]
+    assert len(ge_records) == 2
+
+    ge_first = next(m for m in ge_records if m.start_date == "1996-01-02")
+    assert ge_first.end_date == "2018-06-18"  # day before 2018-06-19 removal row
+
+    ge_second = next(m for m in ge_records if m.start_date == "2024-11-01")
+    assert ge_second.end_date is None
+
+
+def test_build_sp500_memberships_strips_removal_date_suffix() -> None:
+    from tradescope.data.sp500 import build_sp500_memberships
+
+    changes = pd.DataFrame(
+        {"tickers": ["AAPL,AAL-199702,MSFT"]},
+        index=pd.to_datetime(["1996-01-02"]),
+    )
+    changes.index.name = "date"
+
+    memberships = build_sp500_memberships(changes, "2026-01-01")
+
+    symbols = {m.symbol for m in memberships}
+    assert "AAL" in symbols
+    assert "AAL-199702" not in symbols
+
+
+def test_build_sp500_memberships_multiple_tenures_stored_separately(tmp_path) -> None:
+    from tradescope.data.sp500 import build_sp500_memberships
+    from tradescope.data.universe_memberships import UniverseMembershipStore
+
+    changes = pd.DataFrame(
+        {"tickers": ["AAPL,GE", "AAPL", "AAPL,GE"]},
+        index=pd.to_datetime(["1996-01-02", "2018-06-19", "2024-11-01"]),
+    )
+    changes.index.name = "date"
+
+    memberships = build_sp500_memberships(changes, "2026-01-01")
+    store = UniverseMembershipStore(tmp_path / "universe_memberships.parquet")
+    store.upsert(memberships)
+
+    # GE should be a member in 1997 (first tenure) but not in 2019 (gap)
+    assert "GE" in store.members_on("sp500", date(1997, 1, 1))
+    assert "GE" not in store.members_on("sp500", date(2019, 1, 1))
+    assert "GE" in store.members_on("sp500", date(2025, 1, 1))
+
+
+def test_fetch_sp500_changes_uses_cache(tmp_path) -> None:
+    from tradescope.data.sp500 import fetch_sp500_changes
+
+    # Write a minimal CSV to the cache path
+    cache_path = tmp_path / "sp500_changes.csv"
+    mock_df = pd.DataFrame(
+        {"tickers": ["AAPL,MSFT"]},
+        index=pd.to_datetime(["2024-01-01"]),
+    )
+    mock_df.index.name = "date"
+    mock_df.to_csv(cache_path)
+
+    loaded = fetch_sp500_changes(cache_path=cache_path)
+
+    assert len(loaded) == 1
+    assert "AAPL" in loaded.iloc[0]["tickers"]

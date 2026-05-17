@@ -23,9 +23,8 @@ YFINANCE_RESEARCH_COMPONENTS = [
     "cash_flow",
     "quarterly_cash_flow",
     "ttm_cash_flow",
-    "earnings",
-    "quarterly_earnings",
-    "earnings_dates",
+    # earnings/quarterly_earnings omitted: deprecated in yfinance 1.3+, return None
+    "earnings_dates",   # requires lxml
     "earnings_history",
 ]
 
@@ -112,6 +111,8 @@ class YFinanceProvider(MarketDataProvider):
                 data = fetch_component_payload(ticker, component)
         except Exception as exc:
             raise NoDataError(f"{symbol}: yfinance component '{component}' unavailable: {exc}") from exc
+        if data is None:
+            raise NoDataError(f"{symbol}: yfinance component '{component}' returned no data")
         return normalize_component_frame(symbol, component, data)
 
 
@@ -189,18 +190,12 @@ def expand_yfinance_components(components: list[str]) -> list[str]:
 
 
 def fetch_component_payload(ticker, component: str):
-    if component == "actions":
-        return ticker.actions
     if component == "dividends":
         return ticker.dividends
     if component == "splits":
         return ticker.splits
     if component == "capital_gains":
         return ticker.capital_gains
-    if component == "history_metadata":
-        return ticker.get_history_metadata()
-    if component == "calendar":
-        return ticker.get_calendar()
     if component in {"income_stmt", "incomestmt"}:
         return ticker.get_income_stmt()
     if component in {"quarterly_income_stmt", "quarterly_incomestmt"}:
@@ -217,44 +212,12 @@ def fetch_component_payload(ticker, component: str):
         return ticker.get_cash_flow(freq="quarterly")
     if component in {"ttm_cash_flow", "ttm_cashflow"}:
         return ticker.ttm_cash_flow
-    if component == "earnings":
-        return ticker.get_earnings()
-    if component == "quarterly_earnings":
-        return ticker.quarterly_earnings
     if component == "earnings_dates":
         return ticker.get_earnings_dates(limit=24)
     if component == "earnings_history":
         return ticker.get_earnings_history()
-    if component == "earnings_estimate":
-        return ticker.get_earnings_estimate()
-    if component == "growth_estimates":
-        return ticker.get_growth_estimates()
-    if component == "recommendations":
-        return ticker.get_recommendations()
-    if component == "recommendations_summary":
-        return ticker.get_recommendations_summary()
-    if component == "major_holders":
-        return ticker.get_major_holders()
-    if component == "institutional_holders":
-        return ticker.get_institutional_holders()
-    if component == "mutualfund_holders":
-        return ticker.get_mutualfund_holders()
-    if component == "insider_transactions":
-        return ticker.get_insider_transactions()
-    if component == "insider_roster_holders":
-        return ticker.get_insider_roster_holders()
-    if component == "sustainability":
-        return ticker.get_sustainability()
-    if component == "news":
-        return ticker.news
-    if component == "options":
-        return [{"expiration": expiration} for expiration in ticker.options]
     if component == "option_chains":
         return fetch_option_chains(ticker)
-    if component == "fast_info":
-        return dict(ticker.fast_info)
-    if component == "info":
-        return ticker.get_info()
     raise DataError(f"unsupported yfinance component: {component}")
 
 

@@ -20,7 +20,7 @@ def test_command_group_help_lists_documented_subcommands():
     runner = CliRunner()
     expected = {
         "backtest": ["run", "split", "sweep"],
-        "data": ["audit", "clear", "collect-securities", "fetch", "inspect", "securities", "update", "validate"],
+        "data": ["audit", "clear", "collect-securities", "fetch", "inspect", "manifests", "securities", "update", "validate"],
         "results": ["audit", "best", "compare", "inspect", "show"],
         "strategy": ["describe", "init", "list"],
         "universe": ["list", "show"],
@@ -430,3 +430,194 @@ def test_data_universe_members_excludes_post_delisting(tmp_path):
     assert result.exit_code == 0, result.output
     assert "ENRN" not in result.output
     assert "No members found" in result.output
+
+
+def test_data_universe_ingest_sp500_upserts_memberships(tmp_path, monkeypatch):
+    import pandas as pd
+
+    mock_changes = pd.DataFrame(
+        {"tickers": ["AAPL,MSFT,GE", "AAPL,MSFT"]},
+        index=pd.to_datetime(["1996-01-02", "2018-06-19"]),
+    )
+    mock_changes.index.name = "date"
+
+    monkeypatch.setattr("tradescope.cli.fetch_sp500_changes", lambda cache_path=None: mock_changes)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data", "universe", "ingest-sp500",
+            "--as-of", "2026-01-01",
+            "--processed-dir", str(tmp_path / "processed"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "membership record(s)" in result.output
+
+    from tradescope.data.universe_memberships import UniverseMembershipStore, default_universe_memberships_path
+    store = UniverseMembershipStore(default_universe_memberships_path(tmp_path / "processed"))
+    from datetime import date
+    assert "AAPL" in store.members_on("sp500", date(2020, 1, 1))
+    assert "GE" not in store.members_on("sp500", date(2020, 1, 1))
+    assert "GE" in store.members_on("sp500", date(2000, 1, 1))
+
+
+def test_collect_securities_skips_unavailable_symbols(tmp_path, monkeypatch):
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    store.security_master.upsert_listing_status(
+        [
+            ListingStatusRecord("SPY", "SPDR", "NYSE", "Stock", "1993-01-29", None, "active", "alpha_vantage_listing_status", None),
+            ListingStatusRecord("DEAD", "Dead Co", "NYSE", "Stock", "1990-01-01", "2005-01-01", "active", "alpha_vantage_listing_status", None),
+        ]
+    )
+    store.mark_unavailable("yfinance", "DEAD", pd.Timestamp("2024-01-01").date(), pd.Timestamp("2024-01-03").date(), "1d", "no data")
+
+    collected = []
+
+    def fake_update(symbols, **kwargs):
+        collected.extend(symbols)
+
+        class Config:
+            name = "security_master_collection"
+            symbols = collected[:]
+            start = kwargs["start"]
+            end = kwargs["end"]
+            interval = kwargs["interval"]
+
+            class Data:
+                provider = "yfinance"
+                raw_dir = tmp_path / "raw"
+                processed_dir = tmp_path / "processed"
+                component_dir = tmp_path / "components"
+                coverage_start = kwargs["start"]
+                coverage_end = kwargs["end"]
+                components = kwargs["components"]
+
+            data = Data()
+
+        return Config(), {"ohlcv_symbols": len(collected), "component_files": 0}
+
+    monkeypatch.setattr("tradescope.cli.update_symbols_dataset", fake_update)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data", "collect-securities",
+            "--processed-dir", str(tmp_path / "processed"),
+            "--raw-dir", str(tmp_path / "raw"),
+            "--component-dir", str(tmp_path / "components"),
+            "--start", "2024-01-01",
+            "--end", "2024-01-03",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "DEAD" not in collected
+    assert "SPY" in collected
+    assert "already-unavailable" in result.output
+
+
+def test_collect_securities_resume_last_advances_offset(tmp_path, monkeypatch):
+    import json as _json
+    from tradescope.data.collection_manifest import default_manifest_dir
+
+    manifest_dir = default_manifest_dir(tmp_path / "processed")
+    manifest_dir.mkdir(parents=True)
+    manifest_path = manifest_dir / "security_master_collection_20260101T000000Z.json"
+    manifest_path.write_text(_json.dumps({
+        "kind": "security_master_collection",
+        "generated_at": "2026-01-01T00:00:00+00:00",
+        "offset": 100,
+        "symbols_requested": 50,
+    }))
+
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    store.security_master.upsert_listing_status(
+        [ListingStatusRecord(f"SYM{i}", f"Co{i}", "NYSE", "Stock", "2000-01-01", None, "active", "alpha_vantage_listing_status", None) for i in range(200)]
+    )
+
+    captured_offset = []
+
+    def fake_update(symbols, **kwargs):
+        captured_offset.append(kwargs.get("offset", None))
+
+        class Config:
+            name = "security_master_collection"
+            start = kwargs["start"]
+            end = kwargs["end"]
+            interval = kwargs["interval"]
+
+            class Data:
+                provider = "yfinance"
+                raw_dir = tmp_path / "raw"
+                processed_dir = tmp_path / "processed"
+                component_dir = tmp_path / "components"
+                coverage_start = kwargs["start"]
+                coverage_end = kwargs["end"]
+                components = kwargs["components"]
+
+            data = Data()
+
+        Config.symbols = symbols  # type: ignore[attr-defined]
+        return Config(), {"ohlcv_symbols": len(symbols), "component_files": 0}
+
+    monkeypatch.setattr("tradescope.cli.update_symbols_dataset", fake_update)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data", "collect-securities",
+            "--processed-dir", str(tmp_path / "processed"),
+            "--raw-dir", str(tmp_path / "raw"),
+            "--component-dir", str(tmp_path / "components"),
+            "--start", "2024-01-01",
+            "--end", "2024-01-03",
+            "--resume-last",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Resuming from offset 150" in result.output
+
+
+def test_data_manifests_lists_recent_manifests(tmp_path):
+    import json as _json
+    from tradescope.data.collection_manifest import default_manifest_dir
+
+    manifest_dir = default_manifest_dir(tmp_path / "processed")
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "security_master_collection_20260101T120000Z.json").write_text(
+        _json.dumps({"kind": "security_master_collection", "generated_at": "2026-01-01T12:00:00+00:00"})
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        ["data", "manifests", "--processed-dir", str(tmp_path / "processed")],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "security_master_collection" in result.output
+
+
+def test_data_manifests_show_prints_json(tmp_path):
+    import json as _json
+    from tradescope.data.collection_manifest import default_manifest_dir
+
+    manifest_dir = default_manifest_dir(tmp_path / "processed")
+    manifest_dir.mkdir(parents=True)
+    manifest_file = manifest_dir / "security_master_collection_20260101T120000Z.json"
+    manifest_file.write_text(_json.dumps({"kind": "security_master_collection", "symbols_requested": 42}))
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data", "manifests", "show",
+            "security_master_collection_20260101T120000Z",
+            "--processed-dir", str(tmp_path / "processed"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "symbols_requested" in result.output
+    assert "42" in result.output
