@@ -192,6 +192,7 @@ class MarketDataStore:
     ) -> Path:
         path = self.component_path(provider, symbol, component)
         path.parent.mkdir(parents=True, exist_ok=True)
+        data.columns = data.columns.astype(str)
         data.to_parquet(path, index=True)
         return path
 
