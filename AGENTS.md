@@ -32,6 +32,9 @@ data/
   raw/                      Ignored local provider data
   processed/                Ignored normalized OHLCV parquet data
   components/               Ignored non-OHLCV provider components
+  manifests/                Ignored JSON collection/update manifests
+  security_master.parquet   Ignored local listing/provider inventory
+  symbol_mappings.parquet   Ignored local research-symbol to provider-symbol mappings
 
 results/                    Ignored backtest outputs
 
@@ -79,12 +82,17 @@ Do not commit:
 - `data/raw/`
 - `data/processed/`
 - `data/components/`
+- `data/manifests/`
+- `data/security_master.parquet`
+- `data/symbol_mappings.parquet`
 - `results/`
 - cache directories
 - generated reports
 - egg-info/build artifacts
 
 The file `trading-strategies-list.pdf` is intentionally tracked as a reference document.
+
+The file `HANDOFF.md` is intentionally tracked. Update it before ending a long session or after major pipeline changes so future Claude/Codex sessions can resume with low context.
 
 Never delete local data or results unless the user explicitly asks.
 
@@ -123,6 +131,20 @@ Current intended behavior:
 Be careful with unavailable-symbol caching. A symbol unavailable in one date range must not automatically be treated as unavailable in all ranges.
 
 The current S&P 500 universe is based on current constituents. Treat long historical tests as potentially survivorship-biased until historical constituents are supported.
+
+The security master has Alpha Vantage active/delisted listing ingestion. Provider rows should preserve canonical listing metadata such as `name`, `exchange`, `asset_type`, `ipo_date`, `delisting_date`, `listing_source`, and `listing_as_of_date`.
+
+Provider symbol mappings live in `data/symbol_mappings.parquet`. Keep canonical research symbols separate from provider fetch symbols. For example, yfinance may fetch `BRK-B`, but processed data and strategy inputs should remain keyed by `BRK.B` if that is the security-master symbol.
+
+Large security-master collection runs should be resumable and auditable. Prefer batch options such as `--offset`, `--limit`, manifests, and unavailable-symbol records over ad hoc one-off scripts.
+
+Current survivorship-bias pipeline priorities:
+
+1. Add manual/importable provider symbol mappings.
+2. Teach audit that partial history is valid when bounded by IPO or delisting dates.
+3. Add historical universe membership snapshots.
+4. Improve batch collection resume/progress tools.
+5. Keep all generated data ignored but inspectable through CLI commands.
 
 ## Strategy Contract
 
@@ -229,6 +251,7 @@ Update docs when behavior changes:
 - `DEVELOPMENT_GUIDE.md` for architecture and deep implementation details
 - `STRATEGY_RESEARCH_LOG.md` for strategy experiments and conclusions
 - `AGENTS.md` for instructions future agents must follow
+- `HANDOFF.md` for current state, known gaps, and next-session continuity
 
 Do not let docs drift from CLI behavior.
 
