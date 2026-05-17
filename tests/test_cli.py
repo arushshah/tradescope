@@ -19,7 +19,7 @@ def test_command_group_help_lists_documented_subcommands():
     runner = CliRunner()
     expected = {
         "backtest": ["run", "split", "sweep"],
-        "data": ["audit", "clear", "fetch", "inspect", "update", "validate"],
+        "data": ["audit", "clear", "fetch", "inspect", "securities", "update", "validate"],
         "results": ["audit", "best", "compare", "inspect", "show"],
         "strategy": ["describe", "init", "list"],
         "universe": ["list", "show"],
@@ -116,6 +116,28 @@ def test_data_update_requires_config_or_all():
 
     assert result.exit_code != 0
     assert "provide --config" in result.output
+
+
+def test_data_securities_shows_security_master(tmp_path):
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    index = pd.date_range("2024-01-01", "2024-01-02", freq="D", name="timestamp")
+    store.write_processed(
+        "yfinance",
+        "SPY",
+        pd.Timestamp("2024-01-01").date(),
+        pd.Timestamp("2024-01-03").date(),
+        "1d",
+        pd.DataFrame({"close": [1.0, 2.0], "symbol": "SPY"}, index=index),
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        ["data", "securities", "--processed-dir", str(tmp_path / "processed")],
+    )
+
+    assert result.exit_code == 0
+    assert "SPY" in result.output
+    assert "available" in result.output
 
 
 def test_universe_commands_show_presets():

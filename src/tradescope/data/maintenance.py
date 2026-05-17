@@ -217,6 +217,8 @@ def fetch_configured_components(config: BacktestConfig) -> int:
     written = 0
     for symbol in config.symbols:
         for component in components:
+            if not config.data.refresh and store.has_component(provider.name, symbol, component):
+                continue
             try:
                 data = provider.fetch_component(symbol, component)
             except NoDataError:

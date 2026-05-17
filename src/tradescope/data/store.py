@@ -8,6 +8,8 @@ from typing import Literal
 
 import pandas as pd
 
+from tradescope.data.security_master import SecurityMaster, default_security_master_path
+
 DataLayer = Literal["raw", "processed"]
 
 
@@ -43,6 +45,7 @@ class MarketDataStore:
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         self.processed_dir.mkdir(parents=True, exist_ok=True)
         self.component_dir.mkdir(parents=True, exist_ok=True)
+        self.security_master = SecurityMaster(default_security_master_path(self.processed_dir))
 
     def read_processed(
         self,
@@ -90,7 +93,9 @@ class MarketDataStore:
         interval: str,
         data: pd.DataFrame,
     ) -> Path:
-        return self._write("processed", provider, symbol, start, end, interval, data)
+        path = self._write("processed", provider, symbol, start, end, interval, data)
+        self.security_master.upsert_available(provider, symbol, data, end)
+        return path
 
     def list_entries(
         self,
@@ -188,6 +193,9 @@ class MarketDataStore:
         data.to_parquet(path, index=True)
         return path
 
+    def has_component(self, provider: str, symbol: str, component: str) -> bool:
+        return self.component_path(provider, symbol, component).exists()
+
     def read_component(self, provider: str, symbol: str, component: str) -> pd.DataFrame | None:
         path = self.component_path(provider, symbol, component)
         if not path.exists():
@@ -228,6 +236,7 @@ class MarketDataStore:
             "reason": reason,
         }
         self._write_unavailable_records(records)
+        self.security_master.mark_unavailable(provider, symbol, reason)
 
     def unavailable_entry(
         self,

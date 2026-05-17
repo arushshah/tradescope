@@ -165,6 +165,7 @@ Useful starters:
 
 ```text
 data_sp500_canonical.yaml S&P 500 canonical data collection config
+data_all_us_canonical.yaml Combined Nasdaq + NYSE canonical data collection config
 ma_cross_smoke.yaml        Small SPY smoke test
 ma_cross.yaml              Longer MA crossover run
 ma_cross_sweep_smoke.yaml  Parameter sweep example
@@ -253,6 +254,7 @@ tradescope
     clear
     fetch
     inspect
+    securities
     update
     validate
   reference
@@ -317,6 +319,7 @@ Update canonical data coverage for a universe:
 ```bash
 .venv/bin/tradescope data update --config configs/examples/data_sp500_canonical.yaml
 .venv/bin/tradescope data update --config configs/examples/data_sp500_canonical.yaml --to-today
+.venv/bin/tradescope data update --config configs/examples/data_all_us_canonical.yaml --to-today
 ```
 
 Update every processed OHLCV dataset already stored locally:
@@ -346,6 +349,14 @@ Inspect local data:
 .venv/bin/tradescope data inspect
 .venv/bin/tradescope data inspect --layer processed
 .venv/bin/tradescope data inspect --symbol SPY
+```
+
+Inspect the local security master:
+
+```bash
+.venv/bin/tradescope data securities
+.venv/bin/tradescope data securities --status historical
+.venv/bin/tradescope data securities --status unavailable
 ```
 
 Clear local data:
@@ -554,7 +565,7 @@ option_chains
 
 `all` includes every supported component, including the expensive option-chain collection.
 
-If a provider returns no rows for a symbol, TradeScope records that symbol in `data/processed/_unavailable_symbols.json`, skips it for future matching requests, and continues loading the rest of the universe.
+When processed price history is written, TradeScope also updates `data/security_master.parquet` with the provider, symbol, observed history start/end, and status. A symbol whose fetched history ends before the requested coverage end is marked `historical`, which is the local inventory hook we need for partial histories from delistings or stale symbols. If a provider returns no rows for a symbol, TradeScope records that symbol in `data/processed/_unavailable_symbols.json`, marks it `unavailable` in the security master, skips it for future matching requests, and continues loading the rest of the universe.
 
 ### Universe
 

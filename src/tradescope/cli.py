@@ -23,6 +23,7 @@ from tradescope.data.maintenance import (
     update_stored_dataset,
 )
 from tradescope.data.quality import build_quality_report, reports_to_frame
+from tradescope.data.security_master import SecurityMaster, default_security_master_path
 from tradescope.data.store import MarketDataStore
 from tradescope.results.compare import (
     best_run_from_sweep,
@@ -358,6 +359,25 @@ def inspect_data(
         for entry in entries
     ]
     click.echo(pd.DataFrame(rows).to_string(index=False))
+
+
+@data.command("securities")
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+@click.option("--status", help="Only show one security status.")
+def inspect_securities(processed_dir: Path, status: str | None) -> None:
+    """Inspect the local security master."""
+    frame = SecurityMaster(default_security_master_path(processed_dir)).read()
+    if status:
+        frame = frame[frame["status"] == status]
+    if frame.empty:
+        click.echo("No security master entries found.")
+        return
+    click.echo(frame.to_string(index=False))
 
 
 @data.command("clear")

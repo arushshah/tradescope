@@ -3,7 +3,8 @@ from datetime import date
 import pandas as pd
 
 from tradescope.data.quality import build_quality_report
-from tradescope.data.maintenance import update_stored_dataset
+from tradescope.data.maintenance import fetch_configured_components, update_stored_dataset
+from tradescope.config import load_config
 from tradescope.data.store import MarketDataStore
 from tradescope.data.yfinance_provider import (
     expand_yfinance_components,
@@ -53,6 +54,11 @@ def test_market_data_store_writes_processed_parquet(tmp_path) -> None:
     assert path.suffix == ".parquet"
     assert processed is not None
     assert processed.loc[pd.Timestamp("2024-01-02"), "close"] == 1.0
+    security_master = store.security_master.read()
+    assert security_master.loc[0, "symbol"] == "SPY"
+    assert security_master.loc[0, "status"] == "available"
+    assert security_master.loc[0, "history_start"] == "2024-01-02"
+    assert security_master.loc[0, "history_end"] == "2024-01-02"
 
 
 def test_market_data_store_reads_covering_processed_range(tmp_path) -> None:
@@ -109,6 +115,9 @@ def test_market_data_store_marks_unavailable_symbols(tmp_path) -> None:
     assert entry is not None
     assert entry.symbol == "AACBR"
     assert store.list_unavailable()[0].reason == "no rows"
+    security_master = store.security_master.read()
+    assert security_master.loc[0, "status"] == "unavailable"
+    assert security_master.loc[0, "reason"] == "no rows"
 
     different_window = store.unavailable_entry(
         "yfinance",
@@ -171,6 +180,48 @@ def test_update_stored_dataset_extends_existing_processed_data(tmp_path, monkeyp
     assert counts == {"ohlcv_symbols": 1, "skipped_symbols": 0}
     assert updated is not None
     assert list(updated.index) == list(pd.date_range("2024-01-01", "2024-01-04", freq="D"))
+
+
+def test_security_master_marks_short_history_as_historical(tmp_path) -> None:
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    data = pd.DataFrame(
+        {"close": [1.0], "symbol": "OLD"},
+        index=pd.DatetimeIndex(["2020-01-02"], name="timestamp"),
+    )
+
+    store.write_processed("yfinance", "OLD", date(2010, 1, 1), date(2026, 1, 1), "1d", data)
+    security_master = store.security_master.read()
+
+    assert security_master.loc[0, "symbol"] == "OLD"
+    assert security_master.loc[0, "status"] == "historical"
+    assert security_master.loc[0, "history_start"] == "2020-01-02"
+    assert security_master.loc[0, "history_end"] == "2020-01-02"
+
+
+def test_fetch_configured_components_skips_existing_components(tmp_path, monkeypatch) -> None:
+    config = load_config("configs/examples/ma_cross.yaml")
+    config.symbols = ["SPY"]
+    config.data.raw_dir = tmp_path / "raw"
+    config.data.processed_dir = tmp_path / "processed"
+    config.data.component_dir = tmp_path / "components"
+    config.data.components = ["dividends"]
+    store = MarketDataStore(config.data.raw_dir, config.data.processed_dir, config.data.component_dir)
+    store.write_component(
+        "yfinance",
+        "SPY",
+        "dividends",
+        pd.DataFrame({"dividends": [1.0]}, index=pd.DatetimeIndex(["2024-01-02"])),
+    )
+
+    def fail_fetch_component(_self, _symbol, _component):
+        raise AssertionError("existing component should not be fetched")
+
+    monkeypatch.setattr(
+        "tradescope.data.yfinance_provider.YFinanceProvider.fetch_component",
+        fail_fetch_component,
+    )
+
+    assert fetch_configured_components(config) == 0
 
 
 def test_expand_yfinance_research_bundle_includes_advanced_components() -> None:

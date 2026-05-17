@@ -369,6 +369,7 @@ tradescope data audit
 tradescope data clear
 tradescope data fetch
 tradescope data inspect
+tradescope data securities
 tradescope data update
 tradescope data validate
 tradescope reference
@@ -911,6 +912,16 @@ The processed data layer is range-aware. A file stored as `SPY_2015-01-01_2025-0
 
 When a provider returns no rows for a symbol, the store writes an unavailable-symbol record to `data/processed/_unavailable_symbols.json`. Later requests for the same provider, symbol, interval, and covered date range skip that symbol instead of repeatedly calling the provider.
 
+Each successful processed-price write also updates `data/security_master.parquet`. The security master stores provider, symbol, observed history start/end, first/last seen timestamps, and status:
+
+```text
+available     fetched history reaches the requested coverage end
+historical    fetched history ends before the requested coverage end
+unavailable   provider returned no rows for the requested range
+```
+
+This does not by itself solve survivorship bias, because current exchange lists still omit old delisted tickers, but it gives bulk collection runs a durable inventory for partial histories once a historical symbol source is added.
+
 ### Market Data File Names
 
 Raw and processed files use:
@@ -1275,6 +1286,7 @@ tradescope
     clear
     fetch
     inspect
+    securities
     update
     validate
   reference
@@ -1334,6 +1346,7 @@ Update data:
 
 ```bash
 .venv/bin/tradescope data update --config configs/examples/data_sp500_canonical.yaml
+.venv/bin/tradescope data update --config configs/examples/data_all_us_canonical.yaml --to-today
 .venv/bin/tradescope data update --all
 ```
 
