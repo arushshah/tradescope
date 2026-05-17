@@ -7,15 +7,17 @@ def test_top_level_help_lists_documented_commands():
     result = CliRunner().invoke(cli, ["--help"])
 
     assert result.exit_code == 0
-    for command in ["backtest", "clear-data", "data", "fetch", "results", "strategy", "universe"]:
+    for command in ["backtest", "data", "reference", "results", "strategy", "universe"]:
         assert command in result.output
+    assert "clear-data" not in result.output
+    assert "fetch" not in result.output
 
 
 def test_command_group_help_lists_documented_subcommands():
     runner = CliRunner()
     expected = {
         "backtest": ["run", "split", "sweep"],
-        "data": ["clear-data", "fetch", "inspect", "validate"],
+        "data": ["audit", "clear", "fetch", "inspect", "update", "validate"],
         "results": ["audit", "best", "compare", "inspect", "show"],
         "strategy": ["describe", "init", "list"],
         "universe": ["list", "show"],
@@ -29,11 +31,12 @@ def test_command_group_help_lists_documented_subcommands():
             assert command in result.output
 
 
-def test_top_level_clear_data_matches_documented_execution(tmp_path):
+def test_data_clear_matches_documented_execution(tmp_path):
     result = CliRunner().invoke(
         cli,
         [
-            "clear-data",
+            "data",
+            "clear",
             "--raw-dir",
             str(tmp_path / "raw"),
             "--processed-dir",
@@ -44,6 +47,24 @@ def test_top_level_clear_data_matches_documented_execution(tmp_path):
 
     assert result.exit_code == 0
     assert "No data entries found." in result.output
+
+
+def test_removed_top_level_data_shortcuts_are_not_available():
+    runner = CliRunner()
+
+    assert runner.invoke(cli, ["fetch", "--help"]).exit_code != 0
+    assert runner.invoke(cli, ["clear-data", "--help"]).exit_code != 0
+
+
+def test_reference_lists_full_command_tree():
+    result = CliRunner().invoke(cli, ["reference"])
+
+    assert result.exit_code == 0
+    assert "tradescope backtest run --config VALUE" in result.output
+    assert "tradescope data fetch --config VALUE" in result.output
+    assert "tradescope data clear" in result.output
+    assert "tradescope fetch" not in result.output
+    assert "tradescope clear-data" not in result.output
 
 
 def test_universe_commands_show_presets():

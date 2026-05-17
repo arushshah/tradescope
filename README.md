@@ -248,14 +248,16 @@ tradescope
     run
     split
     sweep
-  clear-data
-  fetch
   data
-    clear-data
+    audit
+    clear
     fetch
     inspect
+    update
     validate
+  reference
   results
+    audit
     best
     compare
     inspect
@@ -272,6 +274,7 @@ tradescope
 Run `--help` on any command or command group for the exact supported options:
 
 ```bash
+.venv/bin/tradescope reference
 .venv/bin/tradescope backtest run --help
 .venv/bin/tradescope results compare --help
 ```
@@ -306,7 +309,6 @@ Run train/test split backtests:
 Fetch raw data and write processed data:
 
 ```bash
-.venv/bin/tradescope fetch --config configs/examples/ma_cross.yaml
 .venv/bin/tradescope data fetch --config configs/examples/ma_cross.yaml
 ```
 
@@ -335,8 +337,8 @@ Inspect local data:
 Clear local data:
 
 ```bash
-.venv/bin/tradescope data clear-data --symbol SPY --yes
-.venv/bin/tradescope clear-data --layer processed --symbol SPY --yes
+.venv/bin/tradescope data clear --symbol SPY --yes
+.venv/bin/tradescope data clear --layer processed --symbol SPY --yes
 ```
 
 Validate data for a config:
@@ -749,7 +751,7 @@ PYENV_VERSION=3.12.2 python --version
 Try:
 
 ```bash
-.venv/bin/tradescope data clear-data --symbol SPY --yes
+.venv/bin/tradescope data clear --symbol SPY --yes
 .venv/bin/tradescope data fetch --config configs/examples/ma_cross.yaml
 ```
 

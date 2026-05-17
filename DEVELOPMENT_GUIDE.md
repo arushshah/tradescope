@@ -362,15 +362,16 @@ tradescope.cli:cli
 The CLI entrypoint. It defines commands like:
 
 ```bash
-tradescope clear-data
-tradescope fetch
 tradescope backtest run
 tradescope backtest sweep
 tradescope backtest split
+tradescope data audit
+tradescope data clear
 tradescope data fetch
 tradescope data inspect
-tradescope data clear-data
+tradescope data update
 tradescope data validate
+tradescope reference
 tradescope results show
 tradescope results compare
 tradescope results inspect
@@ -946,7 +947,7 @@ path
 ### Data Clearing
 
 ```bash
-.venv/bin/tradescope data clear-data --symbol SPY --yes
+.venv/bin/tradescope data clear --symbol SPY --yes
 ```
 
 ### Data Validation
@@ -1269,14 +1270,16 @@ tradescope
     run
     split
     sweep
-  clear-data
-  fetch
   data
-    clear-data
+    audit
+    clear
     fetch
     inspect
+    update
     validate
+  reference
   results
+    audit
     best
     compare
     inspect
@@ -1324,7 +1327,6 @@ Run train/test split:
 Fetch data:
 
 ```bash
-.venv/bin/tradescope fetch --config configs/examples/ma_cross.yaml
 .venv/bin/tradescope data fetch --config configs/examples/ma_cross.yaml
 ```
 
@@ -1338,8 +1340,8 @@ Inspect data:
 Clear data:
 
 ```bash
-.venv/bin/tradescope data clear-data --symbol SPY --yes
-.venv/bin/tradescope clear-data --layer processed --symbol SPY --yes
+.venv/bin/tradescope data clear --symbol SPY --yes
+.venv/bin/tradescope data clear --layer processed --symbol SPY --yes
 ```
 
 Validate data:
@@ -1770,7 +1772,7 @@ results/<name>_split.csv
 ### Clear Data
 
 ```bash
-.venv/bin/tradescope data clear-data --symbol SPY --yes
+.venv/bin/tradescope data clear --symbol SPY --yes
 ```
 
 ### Validate Config Data
@@ -1891,7 +1893,7 @@ If yfinance returns empty data:
 4. Delete stale stored data.
 
 ```bash
-.venv/bin/tradescope data clear-data --symbol SPY --yes
+.venv/bin/tradescope data clear --symbol SPY --yes
 ```
 
 ### Empty Backtest / Zero Trades

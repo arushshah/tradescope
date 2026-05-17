@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Iterable
 
 import click
 
@@ -36,9 +37,55 @@ def cli() -> None:
     """TradeScope research CLI."""
 
 
+@cli.command("reference")
+def command_reference() -> None:
+    """Show the full command reference."""
+    click.echo("TradeScope command reference")
+    click.echo()
+    for row in build_command_reference(cli):
+        click.echo(row)
+
+
+def build_command_reference(root: click.Group) -> list[str]:
+    rows = [_format_reference_row(("tradescope",), root)]
+    rows.extend(_walk_command_reference(root, ("tradescope",)))
+    return rows
+
+
+def _walk_command_reference(group: click.Group, prefix: tuple[str, ...]) -> Iterable[str]:
+    for name, command in group.commands.items():
+        if command.hidden:
+            continue
+        path = (*prefix, name)
+        yield _format_reference_row(path, command)
+        if isinstance(command, click.Group):
+            yield from _walk_command_reference(command, path)
+
+
+def _format_reference_row(path: tuple[str, ...], command: click.Command) -> str:
+    usage = " ".join((*path, *_parameter_labels(command)))
+    return f"{usage:<72} {command.get_short_help_str()}"
+
+
+def _parameter_labels(command: click.Command) -> list[str]:
+    labels = []
+    for parameter in command.params:
+        if isinstance(parameter, click.Option):
+            option = parameter.opts[-1]
+            if parameter.is_flag:
+                labels.append(f"[{option}]")
+            elif parameter.required:
+                labels.append(f"{option} VALUE")
+            else:
+                labels.append(f"[{option} VALUE]")
+        elif isinstance(parameter, click.Argument):
+            labels.append(parameter.human_readable_name.upper())
+    return labels
+
+
 @cli.group()
 def backtest() -> None:
-    """Run and compare backtests."""
+    """Run backtests and sweeps."""
 
 
 @backtest.command("run")
@@ -128,19 +175,12 @@ def split_backtest(
 
 @cli.group()
 def data() -> None:
-    """Fetch and manage market data."""
+    """Manage local market data."""
 
 
 @data.command("fetch")
 @click.option("--config", "config_path", required=True, type=click.Path(exists=True, path_type=Path))
 def fetch_data(config_path: Path) -> None:
-    """Fetch raw data and write processed data from a config."""
-    fetch_data_from_config(config_path)
-
-
-@cli.command("fetch")
-@click.option("--config", "config_path", required=True, type=click.Path(exists=True, path_type=Path))
-def fetch_data_alias(config_path: Path) -> None:
     """Fetch raw data and write processed data from a config."""
     fetch_data_from_config(config_path)
 
@@ -248,7 +288,7 @@ def inspect_data(
     click.echo(pd.DataFrame(rows).to_string(index=False))
 
 
-@data.command("clear-data")
+@data.command("clear")
 @click.option("--raw-dir", type=click.Path(file_okay=False, path_type=Path), default=Path("data/raw"), show_default=True)
 @click.option(
     "--processed-dir",
@@ -260,28 +300,6 @@ def inspect_data(
 @click.option("--symbol", help="Only remove data for this symbol.")
 @click.option("--yes", is_flag=True, help="Confirm deletion without prompting.")
 def clear_data(
-    raw_dir: Path,
-    processed_dir: Path,
-    layer: str | None,
-    symbol: str | None,
-    yes: bool,
-) -> None:
-    """Remove local raw and processed market data."""
-    clear_data_entries(raw_dir, processed_dir, layer, symbol, yes)
-
-
-@cli.command("clear-data")
-@click.option("--raw-dir", type=click.Path(file_okay=False, path_type=Path), default=Path("data/raw"), show_default=True)
-@click.option(
-    "--processed-dir",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=Path("data/processed"),
-    show_default=True,
-)
-@click.option("--layer", type=click.Choice(["raw", "processed"]), help="Only remove one data layer.")
-@click.option("--symbol", help="Only remove data for this symbol.")
-@click.option("--yes", is_flag=True, help="Confirm deletion without prompting.")
-def clear_data_alias(
     raw_dir: Path,
     processed_dir: Path,
     layer: str | None,
@@ -382,7 +400,7 @@ def show_universe(name: str, preset_file: Path) -> None:
 
 @cli.group()
 def results() -> None:
-    """Inspect saved results."""
+    """Inspect, compare, and audit saved results."""
 
 
 @results.command("show")
@@ -552,7 +570,7 @@ def audit_result(run_dir: Path) -> None:
 
 @cli.group()
 def strategy() -> None:
-    """Create and manage custom strategies."""
+    """Inspect and scaffold custom strategies."""
 
 
 @strategy.command("list")
