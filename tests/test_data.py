@@ -177,7 +177,7 @@ def test_expand_yfinance_research_bundle_includes_advanced_components() -> None:
     components = expand_yfinance_components(["ohlcv", "research_bundle"])
 
     assert "ohlcv" in components
-    assert "actions" in components
+    assert "actions" not in components
     assert "dividends" in components
     assert "splits" in components
     assert "capital_gains" in components

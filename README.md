@@ -528,7 +528,7 @@ earnings_dates
 earnings_history
 ```
 
-`research_bundle` expands to corporate actions, dividends, splits, capital gains, all income statements, all balance sheets, all cash flows, and reported earnings data. Backtests currently require `ohlcv`; other components are collected under `data/components` for future strategy research.
+`research_bundle` expands to dividends, splits, capital gains, all income statements, all balance sheets, all cash flows, and reported earnings data. Backtests currently require `ohlcv`; other components are collected under `data/components` for future strategy research.
 
 Additional yfinance components can be requested explicitly when needed:
 

@@ -12,7 +12,6 @@ from tradescope.data.validation import validate_ohlcv
 from tradescope.exceptions import DataError, NoDataError
 
 YFINANCE_RESEARCH_COMPONENTS = [
-    "actions",
     "dividends",
     "splits",
     "capital_gains",
