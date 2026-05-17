@@ -31,6 +31,7 @@ pip-wheel-metadata/
 # Generated reports and large local reference files
 *.html
 *.pdf
+!trading-strategies-list.pdf
 
 # Notebook/editor/system noise
 .DS_Store
