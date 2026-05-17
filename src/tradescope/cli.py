@@ -9,6 +9,7 @@ import click
 from tradescope.backtesting.optimization import expand_param_grid
 from tradescope.backtesting.runner import BacktestRunner
 from tradescope.config import load_config
+from tradescope.data.alpha_vantage import fetch_listing_status
 from tradescope.data.collection_manifest import (
     write_config_collection_manifest,
     write_store_update_manifest,
@@ -372,7 +373,7 @@ def inspect_data(
     click.echo(pd.DataFrame(rows).to_string(index=False))
 
 
-@data.command("securities")
+@data.group("securities", invoke_without_command=True)
 @click.option(
     "--processed-dir",
     type=click.Path(file_okay=False, path_type=Path),
@@ -380,8 +381,11 @@ def inspect_data(
     show_default=True,
 )
 @click.option("--status", help="Only show one security status.")
-def inspect_securities(processed_dir: Path, status: str | None) -> None:
+@click.pass_context
+def securities(ctx: click.Context, processed_dir: Path, status: str | None) -> None:
     """Inspect the local security master."""
+    if ctx.invoked_subcommand is not None:
+        return
     frame = SecurityMaster(default_security_master_path(processed_dir)).read()
     if status:
         frame = frame[frame["status"] == status]
@@ -389,6 +393,40 @@ def inspect_securities(processed_dir: Path, status: str | None) -> None:
         click.echo("No security master entries found.")
         return
     click.echo(frame.to_string(index=False))
+
+
+@securities.command("ingest-alpha-vantage")
+@click.option("--api-key", envvar="ALPHAVANTAGE_API_KEY", required=True, help="Alpha Vantage API key.")
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+@click.option("--date", "as_of_date", callback=lambda _ctx, _param, value: date.fromisoformat(value) if value else None)
+@click.option(
+    "--state",
+    type=click.Choice(["active", "delisted", "both"]),
+    default="both",
+    show_default=True,
+)
+def ingest_alpha_vantage_securities(
+    api_key: str,
+    processed_dir: Path,
+    as_of_date: date | None,
+    state: str,
+) -> None:
+    """Ingest Alpha Vantage active/delisted listing status."""
+    states = ["active", "delisted"] if state == "both" else [state]
+    master = SecurityMaster(default_security_master_path(processed_dir))
+    total = 0
+    for current_state in states:
+        listings = fetch_listing_status(api_key, current_state, as_of_date=as_of_date)
+        count = master.upsert_listing_status(listings)
+        total += count
+        click.echo(f"Ingested {count} {current_state} listing(s)")
+    click.echo(f"Security master: {master.path}")
+    click.echo(f"Total listing(s): {total}")
 
 
 @data.command("clear")

@@ -2,6 +2,7 @@ from click.testing import CliRunner
 import pandas as pd
 
 from tradescope.cli import cli
+from tradescope.data.alpha_vantage import ListingStatusRecord
 from tradescope.data.store import MarketDataStore
 
 
@@ -138,6 +139,53 @@ def test_data_securities_shows_security_master(tmp_path):
     assert result.exit_code == 0
     assert "SPY" in result.output
     assert "available" in result.output
+
+
+def test_data_securities_ingests_alpha_vantage_listing_status(tmp_path, monkeypatch):
+    def fake_fetch_listing_status(api_key, state, as_of_date=None):
+        assert api_key == "demo"
+        return [
+            ListingStatusRecord(
+                symbol=f"{state.upper()}1",
+                name=f"{state} co",
+                exchange="NYSE",
+                asset_type="Stock",
+                ipo_date="2010-01-01",
+                delisting_date="2020-01-01" if state == "delisted" else None,
+                status=state,
+                source="alpha_vantage_listing_status",
+                as_of_date=as_of_date.isoformat() if as_of_date else None,
+            )
+        ]
+
+    monkeypatch.setattr("tradescope.cli.fetch_listing_status", fake_fetch_listing_status)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data",
+            "securities",
+            "ingest-alpha-vantage",
+            "--api-key",
+            "demo",
+            "--processed-dir",
+            str(tmp_path / "processed"),
+            "--date",
+            "2021-01-01",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Ingested 1 active listing(s)" in result.output
+    assert "Ingested 1 delisted listing(s)" in result.output
+
+    show_result = CliRunner().invoke(
+        cli,
+        ["data", "securities", "--processed-dir", str(tmp_path / "processed")],
+    )
+    assert show_result.exit_code == 0
+    assert "ACTIVE1" in show_result.output
+    assert "DELISTED1" in show_result.output
 
 
 def test_universe_commands_show_presets():

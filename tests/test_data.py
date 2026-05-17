@@ -7,6 +7,7 @@ from tradescope.data.collection_manifest import (
     write_config_collection_manifest,
     write_store_update_manifest,
 )
+from tradescope.data.alpha_vantage import ListingStatusRecord, parse_listing_status_csv
 from tradescope.data.quality import build_quality_report
 from tradescope.data.maintenance import fetch_configured_components, update_stored_dataset
 from tradescope.config import load_config
@@ -201,6 +202,52 @@ def test_security_master_marks_short_history_as_historical(tmp_path) -> None:
     assert security_master.loc[0, "status"] == "historical"
     assert security_master.loc[0, "history_start"] == "2020-01-02"
     assert security_master.loc[0, "history_end"] == "2020-01-02"
+
+
+def test_security_master_upserts_alpha_vantage_listing_status(tmp_path) -> None:
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+
+    count = store.security_master.upsert_listing_status(
+        [
+            ListingStatusRecord(
+                symbol="OLD",
+                name="Old Co",
+                exchange="NYSE",
+                asset_type="Stock",
+                ipo_date="2000-01-01",
+                delisting_date="2020-01-01",
+                status="delisted",
+                source="alpha_vantage_listing_status",
+                as_of_date="2021-01-01",
+            )
+        ]
+    )
+    security_master = store.security_master.read()
+
+    assert count == 1
+    assert security_master.loc[0, "symbol"] == "OLD"
+    assert security_master.loc[0, "status"] == "delisted"
+    assert security_master.loc[0, "name"] == "Old Co"
+    assert security_master.loc[0, "delisting_date"] == "2020-01-01"
+    assert security_master.loc[0, "listing_source"] == "alpha_vantage_listing_status"
+
+
+def test_parse_alpha_vantage_listing_status_csv() -> None:
+    records = parse_listing_status_csv(
+        "\n".join(
+            [
+                "symbol,name,exchange,assetType,ipoDate,delistingDate,status",
+                "ABC,ABC Corp,NYSE,Stock,2010-01-01,null,Active",
+                "XYZ,XYZ Corp,NASDAQ,Stock,2000-01-01,2020-01-01,Delisted",
+            ]
+        ),
+        state="active",
+    )
+
+    assert [record.symbol for record in records] == ["ABC", "XYZ"]
+    assert records[0].status == "Active"
+    assert records[0].delisting_date is None
+    assert records[1].delisting_date == "2020-01-01"
 
 
 def test_fetch_configured_components_skips_existing_components(tmp_path, monkeypatch) -> None:

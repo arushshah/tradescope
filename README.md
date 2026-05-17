@@ -255,6 +255,7 @@ tradescope
     fetch
     inspect
     securities
+      ingest-alpha-vantage
     update
     validate
   reference
@@ -359,6 +360,8 @@ Inspect the local security master:
 .venv/bin/tradescope data securities
 .venv/bin/tradescope data securities --status historical
 .venv/bin/tradescope data securities --status unavailable
+.venv/bin/tradescope data securities ingest-alpha-vantage --api-key "$ALPHAVANTAGE_API_KEY"
+.venv/bin/tradescope data securities ingest-alpha-vantage --api-key "$ALPHAVANTAGE_API_KEY" --state delisted --date 2020-01-01
 ```
 
 Clear local data:
@@ -568,6 +571,8 @@ option_chains
 `all` includes every supported component, including the expensive option-chain collection.
 
 When processed price history is written, TradeScope also updates `data/security_master.parquet` with the provider, symbol, observed history start/end, and status. A symbol whose fetched history ends before the requested coverage end is marked `historical`, which is the local inventory hook we need for partial histories from delistings or stale symbols. If a provider returns no rows for a symbol, TradeScope records that symbol in `data/processed/_unavailable_symbols.json`, marks it `unavailable` in the security master, skips it for future matching requests, and continues loading the rest of the universe.
+
+The security master can also ingest Alpha Vantage listing-status data for active and delisted securities. Those rows add listing metadata such as `name`, `exchange`, `asset_type`, `ipo_date`, `delisting_date`, `listing_source`, and `listing_as_of_date`.
 
 ### Universe
 

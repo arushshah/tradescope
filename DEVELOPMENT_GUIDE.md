@@ -922,6 +922,8 @@ unavailable   provider returned no rows for the requested range
 
 This does not by itself solve survivorship bias, because current exchange lists still omit old delisted tickers, but it gives bulk collection runs a durable inventory for partial histories once a historical symbol source is added.
 
+Alpha Vantage listing-status ingestion adds active/delisted security rows with listing metadata such as `name`, `exchange`, `asset_type`, `ipo_date`, `delisting_date`, `listing_source`, and `listing_as_of_date`. Use `tradescope data securities ingest-alpha-vantage` to seed the security master before large yfinance collection runs.
+
 Fetch and update commands write JSON manifests under `data/manifests`. A manifest records the config, coverage window, requested symbol count, component list, loaded/skipped counts, unavailable symbols, and security-status summary. These files are the lightweight progress ledger for long collection jobs while the actual market data remains in Parquet.
 
 ### Market Data File Names
@@ -1289,6 +1291,7 @@ tradescope
     fetch
     inspect
     securities
+      ingest-alpha-vantage
     update
     validate
   reference
@@ -1365,6 +1368,8 @@ Inspect data:
 ```bash
 .venv/bin/tradescope data inspect
 .venv/bin/tradescope data inspect --layer processed
+.venv/bin/tradescope data securities
+.venv/bin/tradescope data securities ingest-alpha-vantage --api-key "$ALPHAVANTAGE_API_KEY"
 ```
 
 Clear data:
