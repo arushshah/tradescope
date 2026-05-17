@@ -10,6 +10,7 @@ from tradescope.data.collection_manifest import (
 from tradescope.data.alpha_vantage import ListingStatusRecord, parse_listing_status_csv
 from tradescope.data.quality import build_quality_report
 from tradescope.data.maintenance import (
+    _coverage_label,
     fetch_configured_components,
     update_stored_dataset,
     update_symbols_dataset,
@@ -425,6 +426,231 @@ def test_symbol_map_import_csv_merges_with_existing(tmp_path) -> None:
     frame = symbol_map.read()
     assert len(frame) == 2
     assert set(frame["source_symbol"]) == {"AAPL", "BRK.B"}
+
+
+def test_coverage_label_ok_when_data_covers_full_window() -> None:
+    label = _coverage_label(
+        actual_start=date(2010, 1, 1),
+        actual_end=date(2025, 12, 31),
+        requested_start=date(2010, 1, 1),
+        expected_last=date(2025, 12, 31),
+        ipo_date=None,
+        delisting_date=None,
+    )
+    assert label == "ok"
+
+
+def test_coverage_label_partial_when_start_missing_and_no_ipo() -> None:
+    label = _coverage_label(
+        actual_start=date(2015, 1, 1),
+        actual_end=date(2025, 12, 31),
+        requested_start=date(2010, 1, 1),
+        expected_last=date(2025, 12, 31),
+        ipo_date=None,
+        delisting_date=None,
+    )
+    assert label == "partial"
+
+
+def test_coverage_label_partial_ipo_when_ipo_after_requested_start() -> None:
+    label = _coverage_label(
+        actual_start=date(2015, 1, 5),
+        actual_end=date(2025, 12, 31),
+        requested_start=date(2010, 1, 1),
+        expected_last=date(2025, 12, 31),
+        ipo_date=date(2015, 1, 1),
+        delisting_date=None,
+    )
+    assert label == "partial_ipo"
+
+
+def test_coverage_label_partial_delisted_when_delisting_before_expected_end() -> None:
+    label = _coverage_label(
+        actual_start=date(2010, 1, 1),
+        actual_end=date(2020, 6, 1),
+        requested_start=date(2010, 1, 1),
+        expected_last=date(2025, 12, 31),
+        ipo_date=None,
+        delisting_date=date(2020, 6, 1),
+    )
+    assert label == "partial_delisted"
+
+
+def test_coverage_label_partial_ipo_when_both_ipo_and_delisting_clip() -> None:
+    # Both ends of the requested range are clipped by listing events; both are explained.
+    # "partial_ipo" is the label (IPO takes precedence when both gaps are explained).
+    label = _coverage_label(
+        actual_start=date(2015, 1, 1),
+        actual_end=date(2020, 6, 1),
+        requested_start=date(2010, 1, 1),
+        expected_last=date(2025, 12, 31),
+        ipo_date=date(2015, 1, 1),
+        delisting_date=date(2020, 6, 1),
+    )
+    assert label == "partial_ipo"
+
+
+def test_coverage_label_partial_ipo_when_ipo_before_requested_start() -> None:
+    # IPO is before the requested start → no clipping, gap is unexplained.
+    label = _coverage_label(
+        actual_start=date(2012, 1, 1),
+        actual_end=date(2025, 12, 31),
+        requested_start=date(2010, 1, 1),
+        expected_last=date(2025, 12, 31),
+        ipo_date=date(2008, 1, 1),
+        delisting_date=None,
+    )
+    assert label == "partial"
+
+
+def test_audit_dataset_labels_ipo_partial_as_valid(tmp_path) -> None:
+    from tradescope.data.alpha_vantage import ListingStatusRecord
+    from tradescope.data.maintenance import audit_dataset
+    from tradescope.config import BacktestConfig, DataConfig, PortfolioConfig, ResultsConfig, StrategyConfig
+
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    store.security_master.upsert_listing_status([
+        ListingStatusRecord(
+            symbol="NEWCO",
+            name="NewCo",
+            exchange="NYSE",
+            asset_type="Stock",
+            ipo_date="2015-01-01",
+            delisting_date=None,
+            status="Active",
+            source="test",
+            as_of_date="2026-01-01",
+        )
+    ])
+
+    # Data only available from IPO date — normal for a recent IPO
+    index = pd.date_range("2015-01-01", "2024-12-31", freq="D", name="timestamp")
+    close = pd.Series(range(100, 100 + len(index)), index=index, dtype=float)
+    frame = pd.DataFrame({"open": close, "high": close, "low": close, "close": close,
+                          "adj_close": close, "volume": 1000, "symbol": "NEWCO", "source": "test"}, index=index)
+    store.write_processed("yfinance", "NEWCO", date(2010, 1, 1), date(2025, 1, 1), "1d", frame)
+
+    config = BacktestConfig(
+        name="test",
+        symbols=["NEWCO"],
+        start=date(2010, 1, 1),
+        end=date(2025, 1, 1),
+        interval="1d",
+        data=DataConfig(
+            provider="yfinance",
+            raw_dir=tmp_path / "raw",
+            processed_dir=tmp_path / "processed",
+            coverage_start=None,
+            coverage_end=None,
+        ),
+        strategy=StrategyConfig(name="buy_hold"),
+        portfolio=PortfolioConfig(benchmark=None),
+        results=ResultsConfig(save_trades=False, save_equity_curve=False, save_plots=False),
+    )
+    rows = audit_dataset(config)
+
+    assert len(rows) == 1
+    assert rows[0].coverage == "partial_ipo"
+
+
+def test_audit_dataset_labels_delisting_partial_as_valid(tmp_path) -> None:
+    from tradescope.data.alpha_vantage import ListingStatusRecord
+    from tradescope.data.maintenance import audit_dataset
+    from tradescope.config import BacktestConfig, DataConfig, PortfolioConfig, ResultsConfig, StrategyConfig
+
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    store.security_master.upsert_listing_status([
+        ListingStatusRecord(
+            symbol="OLDCO",
+            name="OldCo",
+            exchange="NYSE",
+            asset_type="Stock",
+            ipo_date=None,
+            delisting_date="2020-06-01",
+            status="Delisted",
+            source="test",
+            as_of_date="2026-01-01",
+        )
+    ])
+
+    # Data ends at delisting date
+    index = pd.date_range("2010-01-01", "2020-06-01", freq="D", name="timestamp")
+    close = pd.Series(range(100, 100 + len(index)), index=index, dtype=float)
+    frame = pd.DataFrame({"open": close, "high": close, "low": close, "close": close,
+                          "adj_close": close, "volume": 1000, "symbol": "OLDCO", "source": "test"}, index=index)
+    store.write_processed("yfinance", "OLDCO", date(2010, 1, 1), date(2025, 1, 1), "1d", frame)
+
+    config = BacktestConfig(
+        name="test",
+        symbols=["OLDCO"],
+        start=date(2010, 1, 1),
+        end=date(2025, 1, 1),
+        interval="1d",
+        data=DataConfig(
+            provider="yfinance",
+            raw_dir=tmp_path / "raw",
+            processed_dir=tmp_path / "processed",
+            coverage_start=None,
+            coverage_end=None,
+        ),
+        strategy=StrategyConfig(name="buy_hold"),
+        portfolio=PortfolioConfig(benchmark=None),
+        results=ResultsConfig(save_trades=False, save_equity_curve=False, save_plots=False),
+    )
+    rows = audit_dataset(config)
+
+    assert len(rows) == 1
+    assert rows[0].coverage == "partial_delisted"
+
+
+def test_audit_dataset_flags_unexplained_partial_as_repair_needed(tmp_path) -> None:
+    from tradescope.data.maintenance import audit_dataset, symbols_needing_repair
+    from tradescope.config import BacktestConfig, DataConfig, PortfolioConfig, ResultsConfig, StrategyConfig
+
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    # No listing metadata — gap has no IPO/delisting explanation
+    index = pd.date_range("2015-01-01", "2024-12-31", freq="D", name="timestamp")
+    close = pd.Series(range(100, 100 + len(index)), index=index, dtype=float)
+    frame = pd.DataFrame({"open": close, "high": close, "low": close, "close": close,
+                          "adj_close": close, "volume": 1000, "symbol": "GAPPY", "source": "test"}, index=index)
+    store.write_processed("yfinance", "GAPPY", date(2010, 1, 1), date(2025, 1, 1), "1d", frame)
+
+    config = BacktestConfig(
+        name="test",
+        symbols=["GAPPY"],
+        start=date(2010, 1, 1),
+        end=date(2025, 1, 1),
+        interval="1d",
+        data=DataConfig(
+            provider="yfinance",
+            raw_dir=tmp_path / "raw",
+            processed_dir=tmp_path / "processed",
+            coverage_start=None,
+            coverage_end=None,
+        ),
+        strategy=StrategyConfig(name="buy_hold"),
+        portfolio=PortfolioConfig(benchmark=None),
+        results=ResultsConfig(save_trades=False, save_equity_curve=False, save_plots=False),
+    )
+    rows = audit_dataset(config)
+
+    assert rows[0].coverage == "partial"
+    assert "GAPPY" in symbols_needing_repair(rows)
+
+
+def test_symbols_needing_repair_excludes_valid_partials() -> None:
+    from tradescope.data.maintenance import DataAuditRow, symbols_needing_repair
+
+    rows = [
+        DataAuditRow("IPO_CO", "ok", "partial_ipo", 100, "2015-01-01", "2025-01-01", 0, 0, False, 0),
+        DataAuditRow("DEL_CO", "ok", "partial_delisted", 100, "2010-01-01", "2020-01-01", 0, 0, False, 0),
+        DataAuditRow("GAPPY", "ok", "partial", 100, "2015-01-01", "2025-01-01", 0, 0, False, 0),
+    ]
+    needing_repair = symbols_needing_repair(rows)
+
+    assert "IPO_CO" not in needing_repair
+    assert "DEL_CO" not in needing_repair
+    assert "GAPPY" in needing_repair
 
 
 def test_update_symbols_dataset_fetches_arbitrary_security_master_symbols(tmp_path, monkeypatch) -> None:

@@ -200,8 +200,11 @@ def audit_dataset(config: BacktestConfig) -> list[DataAuditRow]:
                 )
             )
             continue
+        listing = store.security_master.get_listing(symbol)
+        ipo_date = _parse_date_field(listing.get("ipo_date"))
+        delisting_date = _parse_date_field(listing.get("delisting_date"))
         report = build_quality_report(symbol, frame)
-        rows.append(row_from_report(report, frame, updated.start, updated.end))
+        rows.append(row_from_report(report, frame, updated.start, updated.end, ipo_date=ipo_date, delisting_date=delisting_date))
     return rows
 
 
@@ -213,7 +216,7 @@ def audit_stored_dataset(
 ) -> list[StoredDataAuditRow]:
     store = MarketDataStore(raw_dir, processed_dir)
     return [
-        audit_stored_group(provider, symbol, current_interval, entries, store)
+        audit_stored_group(provider, symbol, current_interval, entries, store, master=store.security_master)
         for provider, symbol, current_interval, entries in stored_ohlcv_groups(
             store,
             provider=provider_name,
@@ -226,11 +229,14 @@ def rows_to_frame(rows: list[DataAuditRow]) -> pd.DataFrame:
     return pd.DataFrame([row.__dict__ for row in rows])
 
 
+_VALID_COVERAGES = {"ok", "partial_ipo", "partial_delisted"}
+
+
 def symbols_needing_repair(rows: list[DataAuditRow]) -> list[str]:
     return [
         row.symbol
         for row in rows
-        if row.coverage != "ok"
+        if row.coverage not in _VALID_COVERAGES
         or row.status != "ok"
         or row.duplicate_timestamps
         or row.missing_close
@@ -278,14 +284,13 @@ def row_from_report(
     frame: pd.DataFrame,
     start: date,
     end: date | None,
+    ipo_date: date | None = None,
+    delisting_date: date | None = None,
 ) -> DataAuditRow:
     actual_start = pd.Timestamp(report.start).date() if report.start else None
     actual_end = pd.Timestamp(report.end).date() if report.end else None
     expected_last = None if end is None else pd.Timestamp(end).date() - timedelta(days=1)
-    coverage_ok = actual_start is not None and actual_start <= start
-    if expected_last is not None:
-        coverage_ok = coverage_ok and actual_end is not None and actual_end >= expected_last
-    coverage = "ok" if coverage_ok else "partial"
+    coverage = _coverage_label(actual_start, actual_end, start, expected_last, ipo_date, delisting_date)
     return DataAuditRow(
         symbol=report.symbol,
         status=report.status,
@@ -298,6 +303,56 @@ def row_from_report(
         non_monotonic=report.non_monotonic,
         large_calendar_gaps=large_calendar_gap_count(frame),
     )
+
+
+def _coverage_label(
+    actual_start: date | None,
+    actual_end: date | None,
+    requested_start: date,
+    expected_last: date | None,
+    ipo_date: date | None,
+    delisting_date: date | None,
+) -> str:
+    # Full coverage against the originally requested window.
+    full_start_ok = actual_start is not None and actual_start <= requested_start
+    full_end_ok = expected_last is None or (actual_end is not None and actual_end >= expected_last)
+    if full_start_ok and full_end_ok:
+        return "ok"
+
+    # Determine whether each gap is explained by listing metadata.
+    ipo_clips_start = ipo_date is not None and ipo_date > requested_start
+    delisting_clips_end = (
+        delisting_date is not None and expected_last is not None and delisting_date < expected_last
+    )
+
+    missing_start = not full_start_ok
+    missing_end = not full_end_ok
+
+    # A gap is attributed to a listing event when that event clips the requested window:
+    # the IPO was after the requested start (stock simply didn't exist before it), or the
+    # delisting was before the requested end (stock stopped trading before the window closed).
+    start_explained = missing_start and ipo_clips_start
+    end_explained = missing_end and delisting_clips_end
+
+    if start_explained and not missing_end:
+        return "partial_ipo"
+    if end_explained and not missing_start:
+        return "partial_delisted"
+    if start_explained and end_explained:
+        # Both ends explained by IPO + delisting within the requested range.
+        return "partial_ipo"
+    return "partial"
+
+
+def _parse_date_field(value) -> date | None:
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return pd.Timestamp(value).date()
 
 
 def large_calendar_gap_count(frame: pd.DataFrame, max_days: int = 7) -> int:
@@ -329,12 +384,16 @@ def audit_stored_group(
     interval: str,
     entries,
     store: MarketDataStore,
+    master=None,
 ) -> StoredDataAuditRow:
     frame = combine_frames([store.read_entry(entry) for entry in entries])
     report = build_quality_report(symbol, frame)
     start = min(entry_start_date(entry) for entry in entries)
     end = latest_entry_end(entries)
-    row = row_from_report(report, frame, start, end)
+    listing = master.get_listing(symbol) if master is not None else {}
+    ipo_date = _parse_date_field(listing.get("ipo_date"))
+    delisting_date = _parse_date_field(listing.get("delisting_date"))
+    row = row_from_report(report, frame, start, end, ipo_date=ipo_date, delisting_date=delisting_date)
     return StoredDataAuditRow(
         provider=provider,
         symbol=symbol,
@@ -361,7 +420,7 @@ def latest_entry_end(entries) -> date | None:
 
 def row_needs_repair(row) -> bool:
     return (
-        row.coverage != "ok"
+        row.coverage not in _VALID_COVERAGES
         or row.status != "ok"
         or row.duplicate_timestamps
         or row.missing_close

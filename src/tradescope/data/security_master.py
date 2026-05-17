@@ -172,6 +172,10 @@ class SecurityMaster:
             symbols = symbols[:limit]
         return symbols
 
+    def get_listing(self, symbol: str) -> dict:
+        """Return the security_master canonical row for symbol, or empty dict."""
+        return self._read_records().get(security_key("security_master", symbol), {})
+
     def _read_records(self) -> dict[str, dict]:
         if not self.path.exists():
             return {}

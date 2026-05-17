@@ -296,29 +296,27 @@ CLI:
 
 CSV columns: `source_symbol`, `provider`, `provider_symbol` (required); `source`, `status`, `reason` (optional, defaults: `security_master`, `active`, null).
 
-### 2. Audit Should Understand IPOs And Delistings
+### 2. Audit Should Understand IPOs And Delistings — DONE
 
-Current audit can mark partial histories as bad even when partial history is expected.
+Implemented in `src/tradescope/data/maintenance.py` and `src/tradescope/data/security_master.py`.
 
-Needed behavior:
+`SecurityMaster` gained `get_listing(symbol)` which returns the canonical row dict for a symbol.
 
-- If `ipo_date` is after requested start, missing pre-IPO data is okay.
-- If `delisting_date` is before requested end, missing post-delisting data is okay.
-- Use actual observed `history_start` / `history_end` plus listing metadata.
-- Distinguish:
-  - valid partial due to IPO
-  - valid partial due to delisting
-  - invalid gap inside active listing life
-  - provider unavailable
+`_coverage_label(...)` is a new helper in `maintenance.py` that classifies coverage as:
 
-Likely files:
+- `ok` — data covers the full requested window.
+- `partial_ipo` — data starts after requested start; attributed to IPO date being after requested start.
+- `partial_delisted` — data ends before requested end; attributed to delisting date being before requested end.
+- `partial` — unexplained gap, needs repair.
+- `missing` — no data at all (existing, unchanged).
 
-```text
-src/tradescope/data/maintenance.py
-src/tradescope/data/security_master.py
-tests/test_audit.py
-tests/test_data.py
-```
+`row_from_report` now accepts `ipo_date` and `delisting_date` keyword args.
+
+`audit_dataset` and `audit_stored_group` look up listing metadata from `store.security_master.get_listing(symbol)` and pass it to `row_from_report`.
+
+`symbols_needing_repair` and `row_needs_repair` no longer flag `partial_ipo` or `partial_delisted` rows as needing repair.
+
+Sentinel: `_VALID_COVERAGES = {"ok", "partial_ipo", "partial_delisted"}`.
 
 ### 3. Historical Universe Snapshots
 
@@ -419,8 +417,8 @@ The current data-pipeline priority is survivorship-bias mitigation.
    ```
 
 3. ~~Implement manual/importable symbol mappings.~~ (done)
-4. Add audit logic for IPO/delisting-valid partial histories.
-5. Add tests.
+4. ~~Add audit logic for IPO/delisting-valid partial histories.~~ (done)
+5. Add historical universe snapshots.
 6. Run full suite and ruff.
 7. Update `README.md`, `DEVELOPMENT_GUIDE.md`, `AGENTS.md`, and this handoff when behavior changes.
 8. Commit with a small, descriptive message.
