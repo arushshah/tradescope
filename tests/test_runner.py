@@ -483,3 +483,112 @@ def golden_portfolio(fees=0.0, slippage=0.0):
         "exits": pd.DataFrame({"AAA": [False, False, False, True]}, index=index),
     }
     return runner._build_portfolio(data, close, signals)
+
+
+# ---------------------------------------------------------------------------
+# BacktestContext / universe wiring tests
+# ---------------------------------------------------------------------------
+
+def test_strategy_accepts_context_detects_three_param_functions() -> None:
+    from tradescope.backtesting.runner import _strategy_accepts_context
+
+    def two_param(data, params):
+        pass
+
+    def three_param(data, params, context):
+        pass
+
+    assert not _strategy_accepts_context(two_param)
+    assert _strategy_accepts_context(three_param)
+
+
+def test_backtest_context_members_on_queries_membership_store(tmp_path) -> None:
+    from datetime import date
+
+    from tradescope.data.universe_memberships import UniverseMembershipStore, default_universe_memberships_path
+    from tradescope.data.sp500 import build_sp500_memberships
+    from tradescope.strategies.base import BacktestContext
+    import pandas as pd
+
+    store_path = default_universe_memberships_path(tmp_path / "processed")
+    membership_store = UniverseMembershipStore(store_path)
+    changes = pd.DataFrame(
+        {"tickers": ["AAPL,MSFT,GE", "AAPL,MSFT"]},
+        index=pd.to_datetime(["1996-01-02", "2018-06-19"]),
+    )
+    changes.index.name = "date"
+    membership_store.upsert(build_sp500_memberships(changes, "2026-01-01"))
+
+    ctx = BacktestContext(membership_store)
+
+    members_2000 = ctx.members_on("sp500", date(2000, 1, 1))
+    assert "AAPL" in members_2000
+    assert "GE" in members_2000
+
+    members_2020 = ctx.members_on("sp500", date(2020, 1, 1))
+    assert "GE" not in members_2020
+    assert "AAPL" in members_2020
+
+
+def test_runner_passes_context_to_three_param_strategy(tmp_path) -> None:
+    from datetime import date
+
+    from tradescope.config import load_config
+    from tradescope.data.store import MarketDataStore
+    from tradescope.data.universe_memberships import UniverseMembershipStore, default_universe_memberships_path
+    from tradescope.data.sp500 import build_sp500_memberships
+    from tradescope.strategies.base import BacktestContext
+    import pandas as pd
+
+    config = load_config("configs/examples/ma_cross.yaml")
+    config.name = "context_test"
+    config.symbols = ["AAPL", "MSFT"]
+    config.start = pd.Timestamp("2024-01-01").date()
+    config.end = pd.Timestamp("2024-04-01").date()
+    config.data.use_canonical_coverage = False
+    config.data.raw_dir = tmp_path / "raw"
+    config.data.processed_dir = tmp_path / "processed"
+    config.data.refresh = False
+    config.results.output_dir = tmp_path / "results"
+    config.results.save_plots = False
+    config.portfolio.benchmark = None
+
+    store = MarketDataStore(config.data.raw_dir, config.data.processed_dir)
+    index = pd.date_range("2024-01-01", periods=90, freq="D", name="timestamp")
+    for symbol in config.symbols:
+        close = pd.Series(range(100, 190), index=index, dtype=float)
+        frame = pd.DataFrame(
+            {"open": close, "high": close + 1, "low": close - 1, "close": close,
+             "adj_close": close, "volume": 1000, "symbol": symbol, "source": "test"},
+            index=index,
+        )
+        store.write_processed("yfinance", symbol, config.start, config.end, config.interval, frame)
+
+    # Seed membership store so context has real data
+    membership_store = UniverseMembershipStore(default_universe_memberships_path(tmp_path / "processed"))
+    changes = pd.DataFrame(
+        {"tickers": ["AAPL,MSFT"]},
+        index=pd.to_datetime(["1996-01-02"]),
+    )
+    changes.index.name = "date"
+    membership_store.upsert(build_sp500_memberships(changes, "2026-01-01"))
+
+    received_context: list[BacktestContext] = []
+
+    def context_strategy(data, params, context):
+        received_context.append(context)
+        idx = pd.date_range("2024-01-01", periods=90, freq="D")
+        entries = pd.DataFrame(False, index=idx, columns=list(data.keys()))
+        exits = pd.DataFrame(False, index=idx, columns=list(data.keys()))
+        return {"entries": entries, "exits": exits}
+
+    config.strategy.name = None
+    import unittest.mock as mock
+    with mock.patch("tradescope.backtesting.runner.load_strategy", return_value=context_strategy):
+        BacktestRunner(config).run()
+
+    assert len(received_context) == 1
+    assert isinstance(received_context[0], BacktestContext)
+    members = received_context[0].members_on("sp500", date(2024, 1, 1))
+    assert "AAPL" in members
+    assert "MSFT" in members

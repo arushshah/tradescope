@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 from datetime import date
 
@@ -15,10 +16,12 @@ from tradescope.data.store import (
     trim_frame,
 )
 from tradescope.data.symbol_mapping import yfinance_symbol_candidates
+from tradescope.data.universe_memberships import UniverseMembershipStore, default_universe_memberships_path
 from tradescope.data.yfinance_provider import YFinanceProvider
 from tradescope.data.validation import validate_ohlcv
 from tradescope.exceptions import DataError, NoDataError, StrategyError, TradeScopeError
 from tradescope.results.store import ResultStore
+from tradescope.strategies.base import BacktestContext
 from tradescope.strategies.loader import load_strategy
 
 
@@ -41,7 +44,13 @@ class BacktestRunner:
             self.config.strategy.path,
             self.config.strategy.module,
         )
-        signals = strategy(data, self.config.strategy.params)
+        if _strategy_accepts_context(strategy):
+            membership_store = UniverseMembershipStore(
+                default_universe_memberships_path(self.config.data.processed_dir)
+            )
+            signals = strategy(data, self.config.strategy.params, BacktestContext(membership_store))
+        else:
+            signals = strategy(data, self.config.strategy.params)
         validate_signals(signals)
 
         portfolio = self._build_portfolio(data, close, signals)
@@ -382,3 +391,12 @@ def align_like(value, close: pd.DataFrame) -> pd.DataFrame:
 def align_numeric_like(value, close: pd.DataFrame) -> pd.DataFrame:
     frame = value.to_frame() if isinstance(value, pd.Series) else pd.DataFrame(value)
     return frame.reindex(index=close.index, columns=close.columns).astype(float)
+
+
+def _strategy_accepts_context(strategy) -> bool:
+    """Return True if the strategy function declares a third (context) parameter."""
+    try:
+        sig = inspect.signature(strategy)
+        return len(sig.parameters) >= 3
+    except (ValueError, TypeError):
+        return False
