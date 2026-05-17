@@ -26,6 +26,8 @@ pip-wheel-metadata/
 /data/raw/
 /data/processed/
 /data/components/
+/data/manifests/
+/data/security_master.parquet
 /results/
 
 # Generated reports and large local reference files
