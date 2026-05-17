@@ -18,9 +18,7 @@ data:
   coverage_end: "2026-01-01"
   components:
     - ohlcv
-    - actions
-    - dividends
-    - splits
+    - research_bundle
 strategy:
   name: buy_hold
   params: {}

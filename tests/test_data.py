@@ -5,7 +5,11 @@ import pandas as pd
 from tradescope.data.quality import build_quality_report
 from tradescope.data.maintenance import update_stored_dataset
 from tradescope.data.store import MarketDataStore
-from tradescope.data.yfinance_provider import normalize_yfinance_frame
+from tradescope.data.yfinance_provider import (
+    expand_yfinance_components,
+    normalize_component_frame,
+    normalize_yfinance_frame,
+)
 
 
 def test_normalize_yfinance_frame() -> None:
@@ -167,6 +171,31 @@ def test_update_stored_dataset_extends_existing_processed_data(tmp_path, monkeyp
     assert counts == {"ohlcv_symbols": 1, "skipped_symbols": 0}
     assert updated is not None
     assert list(updated.index) == list(pd.date_range("2024-01-01", "2024-01-04", freq="D"))
+
+
+def test_expand_yfinance_research_bundle_includes_advanced_components() -> None:
+    components = expand_yfinance_components(["ohlcv", "research_bundle"])
+
+    assert "ohlcv" in components
+    assert "income_stmt" in components
+    assert "quarterly_balance_sheet" in components
+    assert "earnings_estimate" in components
+    assert "institutional_holders" in components
+    assert "news" in components
+    assert "option_chains" not in components
+
+
+def test_normalize_component_frame_handles_list_payloads() -> None:
+    frame = normalize_component_frame(
+        "SPY",
+        "news",
+        [{"title": "Example", "nested": {"publisher": "Test"}}],
+    )
+
+    assert frame.loc[0, "title"] == "Example"
+    assert frame.loc[0, "nested"] == "{'publisher': 'Test'}"
+    assert frame.loc[0, "symbol"] == "SPY"
+    assert frame.loc[0, "component"] == "news"
 
 
 def test_build_quality_report_warns_on_missing_close() -> None:

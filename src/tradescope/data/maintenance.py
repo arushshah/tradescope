@@ -13,7 +13,7 @@ from tradescope.config import BacktestConfig
 from tradescope.data.quality import DataQualityReport, build_quality_report
 from tradescope.data.store import MarketDataStore
 from tradescope.data.store import combine_frames, entry_end_date, entry_start_date
-from tradescope.data.yfinance_provider import YFinanceProvider
+from tradescope.data.yfinance_provider import YFinanceProvider, expand_yfinance_components
 from tradescope.exceptions import DataError, NoDataError
 
 
@@ -206,7 +206,7 @@ def stored_rows_needing_repair(rows: list[StoredDataAuditRow]) -> list[StoredDat
 
 
 def fetch_configured_components(config: BacktestConfig) -> int:
-    components = [component for component in config.data.components if component != "ohlcv"]
+    components = [component for component in expand_yfinance_components(config.data.components) if component != "ohlcv"]
     if not components:
         return 0
     if config.data.provider != "yfinance":

@@ -508,15 +508,44 @@ Supported `components` currently include:
 
 ```text
 ohlcv
+research_bundle
+all
 actions
 dividends
 splits
 capital_gains
-info
 fast_info
+info
+history_metadata
+calendar
+income_stmt
+quarterly_income_stmt
+ttm_income_stmt
+balance_sheet
+quarterly_balance_sheet
+cash_flow
+quarterly_cash_flow
+ttm_cash_flow
+earnings
+quarterly_earnings
+earnings_dates
+earnings_history
+earnings_estimate
+growth_estimates
+recommendations
+recommendations_summary
+major_holders
+institutional_holders
+mutualfund_holders
+insider_transactions
+insider_roster_holders
+sustainability
+news
+options
+option_chains
 ```
 
-Backtests currently require `ohlcv`. Other components are collected under `data/components` for future strategy research.
+`research_bundle` expands to the broad research set above except `option_chains`. `all` includes that expensive option-chain collection too. Backtests currently require `ohlcv`; other components are collected under `data/components` for future strategy research.
 
 If a provider returns no rows for a symbol, TradeScope records that symbol in `data/processed/_unavailable_symbols.json`, skips it for future matching requests, and continues loading the rest of the universe.
 
