@@ -9,6 +9,10 @@ import click
 from tradescope.backtesting.optimization import expand_param_grid
 from tradescope.backtesting.runner import BacktestRunner
 from tradescope.config import load_config
+from tradescope.data.collection_manifest import (
+    write_config_collection_manifest,
+    write_store_update_manifest,
+)
 from tradescope.data.maintenance import (
     audit_dataset,
     audit_stored_dataset,
@@ -197,6 +201,7 @@ def fetch_data_from_config(config_path: Path) -> None:
     runner = BacktestRunner(config)
     loaded = runner._load_data()
     component_files = fetch_configured_components(config)
+    counts = {"ohlcv_symbols": len(loaded), "component_files": component_files}
     store = MarketDataStore(config.data.raw_dir, config.data.processed_dir, config.data.component_dir)
     unavailable = [
         entry
@@ -205,11 +210,13 @@ def fetch_data_from_config(config_path: Path) -> None:
         and entry.interval == config.interval
         and entry.symbol in set(config.symbols)
     ]
+    manifest_path = write_config_collection_manifest(config, counts, config_path=config_path)
     click.echo(f"Loaded {len(loaded)} symbol(s)")
     if component_files:
         click.echo(f"Loaded {component_files} component file(s)")
     if unavailable:
         click.echo(f"Skipped unavailable symbol(s): {len(unavailable)}")
+    click.echo(f"Manifest: {manifest_path}")
 
 
 @data.command("update")
@@ -244,18 +251,22 @@ def update_data(
     if all_entries:
         end = end_date or default_update_end()
         counts = update_stored_dataset(raw_dir, processed_dir, provider, interval, end=end)
+        manifest_path = write_store_update_manifest(raw_dir, processed_dir, counts, provider, interval, end)
         click.echo(f"Updated OHLCV dataset(s): {counts['ohlcv_symbols']}")
         if counts["skipped_symbols"]:
             click.echo(f"Skipped dataset(s): {counts['skipped_symbols']}")
+        click.echo(f"Manifest: {manifest_path}")
         return
     if config_path is None:
         raise click.ClickException("provide --config for config-scoped updates or --all for store-wide updates")
     config = load_config(config_path)
     end = end_date or (default_update_end() if to_today else None)
     counts = update_dataset(config, end=end)
+    manifest_path = write_config_collection_manifest(config, counts, config_path=config_path)
     click.echo(f"Updated OHLCV for {counts['ohlcv_symbols']} symbol(s)")
     if counts["component_files"]:
         click.echo(f"Updated {counts['component_files']} component file(s)")
+    click.echo(f"Manifest: {manifest_path}")
 
 
 @data.command("audit")

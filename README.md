@@ -329,6 +329,8 @@ Update every processed OHLCV dataset already stored locally:
 .venv/bin/tradescope data update --all --provider yfinance --interval 1d
 ```
 
+Every fetch/update writes a JSON manifest under `data/manifests`, recording the config, coverage window, requested symbol count, component list, loaded/skipped counts, unavailable symbols, and security-status summary.
+
 Audit canonical data coverage and repair symbols with missing coverage or quality warnings:
 
 ```bash
@@ -857,6 +859,8 @@ results:
 - Add more data providers: Polygon, Alpaca, Interactive Brokers, local CSV/Parquet imports.
 - Add market-calendar-aware data validation using a library such as `exchange_calendars`.
 - Add richer data quality checks for missing trading days, split/dividend handling, and symbol coverage.
+- Add historical/delisted ticker source ingestion into the security master.
+- Add a bulk collection progress view for manifests and partially completed jobs.
 - Add true rebalance-to-target portfolio construction beyond entry-signal equal-weight sizing.
 - Add multi-strategy portfolio support.
 - Add short-side strategy contract support intentionally, with tests and config validation.

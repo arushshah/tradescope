@@ -1,7 +1,12 @@
 from datetime import date
+import json
 
 import pandas as pd
 
+from tradescope.data.collection_manifest import (
+    write_config_collection_manifest,
+    write_store_update_manifest,
+)
 from tradescope.data.quality import build_quality_report
 from tradescope.data.maintenance import fetch_configured_components, update_stored_dataset
 from tradescope.config import load_config
@@ -222,6 +227,58 @@ def test_fetch_configured_components_skips_existing_components(tmp_path, monkeyp
     )
 
     assert fetch_configured_components(config) == 0
+
+
+def test_write_config_collection_manifest_records_run_context(tmp_path) -> None:
+    config = load_config("configs/examples/ma_cross.yaml")
+    config.symbols = ["SPY"]
+    config.data.raw_dir = tmp_path / "raw"
+    config.data.processed_dir = tmp_path / "processed"
+    config.data.component_dir = tmp_path / "components"
+    store = MarketDataStore(config.data.raw_dir, config.data.processed_dir, config.data.component_dir)
+    store.write_processed(
+        "yfinance",
+        "SPY",
+        date(2024, 1, 1),
+        date(2024, 1, 3),
+        "1d",
+        pd.DataFrame(
+            {"close": [1.0], "symbol": "SPY"},
+            index=pd.DatetimeIndex(["2024-01-02"], name="timestamp"),
+        ),
+    )
+
+    path = write_config_collection_manifest(
+        config,
+        {"ohlcv_symbols": 1, "component_files": 0},
+        manifest_dir=tmp_path / "manifests",
+    )
+    payload = json.loads(path.read_text())
+
+    assert payload["kind"] == "config"
+    assert payload["name"] == config.name
+    assert payload["symbols_requested"] == 1
+    assert payload["counts"]["ohlcv_symbols"] == 1
+    assert payload["security_status_counts"] == {"available": 1}
+
+
+def test_write_store_update_manifest_records_update_context(tmp_path) -> None:
+    path = write_store_update_manifest(
+        tmp_path / "raw",
+        tmp_path / "processed",
+        {"ohlcv_symbols": 1, "skipped_symbols": 2},
+        provider="yfinance",
+        interval="1d",
+        end=date(2026, 1, 1),
+        manifest_dir=tmp_path / "manifests",
+    )
+    payload = json.loads(path.read_text())
+
+    assert payload["kind"] == "store_update"
+    assert payload["provider"] == "yfinance"
+    assert payload["interval"] == "1d"
+    assert payload["end"] == "2026-01-01"
+    assert payload["counts"] == {"ohlcv_symbols": 1, "skipped_symbols": 2}
 
 
 def test_expand_yfinance_research_bundle_includes_advanced_components() -> None:

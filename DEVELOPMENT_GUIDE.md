@@ -922,6 +922,8 @@ unavailable   provider returned no rows for the requested range
 
 This does not by itself solve survivorship bias, because current exchange lists still omit old delisted tickers, but it gives bulk collection runs a durable inventory for partial histories once a historical symbol source is added.
 
+Fetch and update commands write JSON manifests under `data/manifests`. A manifest records the config, coverage window, requested symbol count, component list, loaded/skipped counts, unavailable symbols, and security-status summary. These files are the lightweight progress ledger for long collection jobs while the actual market data remains in Parquet.
+
 ### Market Data File Names
 
 Raw and processed files use:
