@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 from datetime import date
 
@@ -15,10 +16,12 @@ from tradescope.data.store import (
     trim_frame,
 )
 from tradescope.data.symbol_mapping import yfinance_symbol_candidates
+from tradescope.data.universe_memberships import UniverseMembershipStore, default_universe_memberships_path
 from tradescope.data.yfinance_provider import YFinanceProvider
 from tradescope.data.validation import validate_ohlcv
 from tradescope.exceptions import DataError, NoDataError, StrategyError, TradeScopeError
 from tradescope.results.store import ResultStore
+from tradescope.strategies.base import BacktestContext
 from tradescope.strategies.loader import load_strategy
 
 
@@ -41,7 +44,13 @@ class BacktestRunner:
             self.config.strategy.path,
             self.config.strategy.module,
         )
-        signals = strategy(data, self.config.strategy.params)
+        if _strategy_accepts_context(strategy):
+            membership_store = UniverseMembershipStore(
+                default_universe_memberships_path(self.config.data.processed_dir)
+            )
+            signals = strategy(data, self.config.strategy.params, BacktestContext(membership_store))
+        else:
+            signals = strategy(data, self.config.strategy.params)
         validate_signals(signals)
 
         portfolio = self._build_portfolio(data, close, signals)
@@ -227,9 +236,9 @@ class BacktestRunner:
             "entries": entries,
             "exits": exits,
             "price": self._execution_price(data, close),
-            "open": make_price_matrix(data, "open").reindex(index=close.index, columns=close.columns),
-            "high": make_price_matrix(data, "high").reindex(index=close.index, columns=close.columns),
-            "low": make_price_matrix(data, "low").reindex(index=close.index, columns=close.columns),
+            "open": make_adj_price_matrix(data, "open").reindex(index=close.index, columns=close.columns),
+            "high": make_adj_price_matrix(data, "high").reindex(index=close.index, columns=close.columns),
+            "low": make_adj_price_matrix(data, "low").reindex(index=close.index, columns=close.columns),
             "init_cash": self.config.portfolio.init_cash,
             "fees": self.config.portfolio.fees,
             "slippage": self.config.portfolio.slippage,
@@ -258,7 +267,7 @@ class BacktestRunner:
         if price_mode == "close":
             return close
 
-        open_price = make_price_matrix(data, "open").reindex(index=close.index, columns=close.columns)
+        open_price = make_adj_price_matrix(data, "open").reindex(index=close.index, columns=close.columns)
         if price_mode == "open":
             return open_price
         if price_mode == "next_open":
@@ -318,18 +327,27 @@ class BacktestRunner:
             benchmark_data = data[benchmark]
         else:
             benchmark_data = self._load_data([benchmark])[benchmark]
-        close = benchmark_data["close"].dropna()
+        close = benchmark_data["adj_close"].dropna()
         if close.empty:
             return None
         return (close / close.iloc[0] * self.config.portfolio.init_cash).rename(benchmark)
 
 
 def make_close_matrix(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    return make_price_matrix(data, "close").dropna(how="all")
+    return make_price_matrix(data, "adj_close").dropna(how="all")
 
 
 def make_price_matrix(data: dict[str, pd.DataFrame], column: str) -> pd.DataFrame:
     return pd.concat({symbol: frame[column] for symbol, frame in data.items()}, axis=1)
+
+
+def make_adj_price_matrix(data: dict[str, pd.DataFrame], column: str) -> pd.DataFrame:
+    """Return a price matrix for `column` scaled by the adj_close/close ratio."""
+    frames = {}
+    for symbol, frame in data.items():
+        ratio = (frame["adj_close"] / frame["close"]).replace([float("inf"), float("-inf")], 1.0).fillna(1.0)
+        frames[symbol] = frame[column] * ratio
+    return pd.concat(frames, axis=1)
 
 
 def validate_signals(signals: dict) -> None:
@@ -382,3 +400,12 @@ def align_like(value, close: pd.DataFrame) -> pd.DataFrame:
 def align_numeric_like(value, close: pd.DataFrame) -> pd.DataFrame:
     frame = value.to_frame() if isinstance(value, pd.Series) else pd.DataFrame(value)
     return frame.reindex(index=close.index, columns=close.columns).astype(float)
+
+
+def _strategy_accepts_context(strategy) -> bool:
+    """Return True if the strategy function declares a third (context) parameter."""
+    try:
+        sig = inspect.signature(strategy)
+        return len(sig.parameters) >= 3
+    except (ValueError, TypeError):
+        return False

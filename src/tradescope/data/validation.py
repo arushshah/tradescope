@@ -26,7 +26,10 @@ def validate_ohlcv(symbol: str, data: pd.DataFrame) -> pd.DataFrame:
     if cleaned[price_columns].isna().all(axis=None):
         raise DataError(f"{symbol}: price data is entirely empty")
 
-    cleaned[price_columns] = cleaned[price_columns].ffill()
+    # Limit fill to 5 bars so extended trading halts are not silently masked.
+    cleaned[price_columns] = cleaned[price_columns].ffill(limit=5)
     cleaned["volume"] = cleaned["volume"].fillna(0)
+    # Drop rows where prices could not be filled — genuine data gaps.
+    cleaned = cleaned.dropna(subset=["close", "adj_close"])
     return cleaned
 
