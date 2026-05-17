@@ -11,7 +11,11 @@ from tradescope.backtesting.runner import BacktestRunner
 from tradescope.config import load_config
 from tradescope.data.alpha_vantage import fetch_listing_status
 from tradescope.data.collection_manifest import (
+    default_manifest_dir,
+    find_last_manifest,
+    list_manifests,
     write_config_collection_manifest,
+    write_security_master_manifest,
     write_store_update_manifest,
 )
 from tradescope.data.maintenance import (
@@ -303,6 +307,7 @@ def update_data(
 @click.option("--offset", type=click.IntRange(min=0), default=0, show_default=True)
 @click.option("--limit", type=click.IntRange(min=1), help="Collect only the first N matching symbols.")
 @click.option("--refresh", is_flag=True, help="Refetch existing data and components.")
+@click.option("--resume-last", is_flag=True, help="Resume from where the last collection run left off.")
 def collect_securities(
     processed_dir: Path,
     raw_dir: Path,
@@ -318,8 +323,19 @@ def collect_securities(
     offset: int,
     limit: int | None,
     refresh: bool,
+    resume_last: bool,
 ) -> None:
     """Collect market data for securities from the security master."""
+    if resume_last:
+        last = find_last_manifest(
+            default_manifest_dir(processed_dir),
+            kind="security_master_collection",
+        )
+        if last is None:
+            raise click.ClickException("no previous security_master_collection manifest found")
+        offset = (last.get("offset") or 0) + (last.get("symbols_requested") or 0)
+        click.echo(f"Resuming from offset {offset} (last run: {last.get('generated_at', '?')})")
+
     master = SecurityMaster(default_security_master_path(processed_dir))
     symbols = master.symbols(
         statuses=list(status),
@@ -331,6 +347,25 @@ def collect_securities(
     )
     if not symbols:
         raise click.ClickException("no matching securities found in security master")
+
+    skipped_unavailable = 0
+    if not refresh:
+        store = MarketDataStore(raw_dir, processed_dir)
+        unavailable_set = {
+            u.symbol
+            for u in store.list_unavailable()
+            if u.provider == "yfinance"
+            and u.start == start_date
+            and u.end == end_date
+            and u.interval == interval
+        }
+        if unavailable_set:
+            filtered = [s for s in symbols if s.upper() not in unavailable_set]
+            skipped_unavailable = len(symbols) - len(filtered)
+            symbols = filtered
+        if skipped_unavailable:
+            click.echo(f"Skipped {skipped_unavailable} already-unavailable symbol(s) (use --refresh to retry)")
+
     config, counts = update_symbols_dataset(
         symbols=symbols,
         start=date.fromisoformat(start_date),
@@ -342,7 +377,9 @@ def collect_securities(
         components=list(components),
         refresh=refresh,
     )
-    manifest_path = write_config_collection_manifest(config, counts)
+    manifest_path = write_security_master_manifest(
+        config, counts, offset=offset, limit=limit, skipped_unavailable=skipped_unavailable
+    )
     click.echo(f"Matched security master symbol(s): {len(symbols)}")
     click.echo(f"Updated OHLCV for {counts['ohlcv_symbols']} symbol(s)")
     if counts["component_files"]:
@@ -776,6 +813,70 @@ def validate_data(config_path: Path) -> None:
     click.echo(summary.to_string(index=False))
     if any(report.status != "ok" for report in reports):
         raise click.ClickException("data validation completed with warnings")
+
+
+# ---------------------------------------------------------------------------
+# data manifests
+# ---------------------------------------------------------------------------
+
+@data.group("manifests", invoke_without_command=True)
+@click.option(
+    "--n",
+    default=10,
+    show_default=True,
+    help="Number of recent manifests to show.",
+)
+@click.option(
+    "--manifest-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+)
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+@click.pass_context
+def data_manifests(ctx: click.Context, n: int, manifest_dir: Path | None, processed_dir: Path) -> None:
+    """Browse collection manifests."""
+    if ctx.invoked_subcommand is not None:
+        return
+    effective_dir = manifest_dir or default_manifest_dir(processed_dir)
+    entries = list_manifests(effective_dir, n=n)
+    if not entries:
+        click.echo("No manifests found.")
+        return
+    click.echo(f"{'Filename':<50}  {'Kind':<30}  {'Generated'}")
+    click.echo("-" * 100)
+    for path, payload in entries:
+        kind = payload.get("kind", "unknown")
+        generated_at = payload.get("generated_at", "")[:19]
+        click.echo(f"{path.name:<50}  {kind:<30}  {generated_at}")
+
+
+@data_manifests.command("show")
+@click.argument("manifest_id")
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+def manifests_show(manifest_id: str, processed_dir: Path) -> None:
+    """Show full details of a specific manifest.
+
+    MANIFEST_ID is the filename (with or without .json) or a full path.
+    """
+    manifest_dir = default_manifest_dir(processed_dir)
+    path = Path(manifest_id)
+    if not path.is_absolute():
+        if not path.suffix:
+            path = path.with_suffix(".json")
+        path = manifest_dir / path
+    if not path.exists():
+        raise click.ClickException(f"manifest not found: {path}")
+    click.echo(path.read_text(encoding="utf-8"))
 
 
 @cli.group()

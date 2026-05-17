@@ -10,6 +10,60 @@ from tradescope.data.security_master import SecurityMaster, default_security_mas
 from tradescope.data.store import MarketDataStore
 
 
+def write_security_master_manifest(
+    config: BacktestConfig,
+    counts: dict[str, int],
+    offset: int,
+    limit: int | None,
+    skipped_unavailable: int = 0,
+    manifest_dir: Path | None = None,
+) -> Path:
+    payload = {
+        "kind": "security_master_collection",
+        "generated_at": utc_now(),
+        "provider": config.data.provider,
+        "interval": config.interval,
+        "start": config.start.isoformat(),
+        "end": config.end.isoformat() if config.end else None,
+        "offset": offset,
+        "limit": limit,
+        "symbols_requested": len(config.symbols),
+        "skipped_unavailable": skipped_unavailable,
+        "components": config.data.components,
+        "counts": counts,
+        "security_status_counts": security_status_counts(config.data.processed_dir),
+    }
+    directory = manifest_dir or default_manifest_dir(config.data.processed_dir)
+    return write_manifest(directory, "security_master_collection", payload)
+
+
+def find_last_manifest(manifest_dir: Path, kind: str | None = None) -> dict[str, Any] | None:
+    """Return the most recent manifest payload, optionally filtered by kind."""
+    if not manifest_dir.exists():
+        return None
+    for path in sorted(manifest_dir.glob("*.json"), reverse=True):
+        try:
+            payload: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if kind is None or payload.get("kind") == kind:
+            return payload
+    return None
+
+
+def list_manifests(manifest_dir: Path, n: int = 10) -> list[tuple[Path, dict[str, Any]]]:
+    """Return the n most recent manifests as (path, payload) pairs."""
+    if not manifest_dir.exists():
+        return []
+    results: list[tuple[Path, dict[str, Any]]] = []
+    for path in sorted(manifest_dir.glob("*.json"), reverse=True)[:n]:
+        try:
+            results.append((path, json.loads(path.read_text(encoding="utf-8"))))
+        except Exception:
+            continue
+    return results
+
+
 def write_config_collection_manifest(
     config: BacktestConfig,
     counts: dict[str, int],
