@@ -12,6 +12,7 @@ class UniversePreset:
     name: str
     description: str
     symbols: list[str]
+    source: str = "static"
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -39,9 +40,11 @@ def load_universe_presets(path: Path) -> dict[str, UniversePreset]:
         if isinstance(value, list):
             description = ""
             symbols = value
+            source = "static"
         elif isinstance(value, dict):
             description = str(value.get("description", ""))
             symbols = value.get("symbols", [])
+            source = str(value.get("source", "static"))
         else:
             raise ValueError(f"universe preset '{name}' must be a mapping or list")
 
@@ -52,6 +55,7 @@ def load_universe_presets(path: Path) -> dict[str, UniversePreset]:
             name=name,
             description=description,
             symbols=normalize_symbols([str(symbol) for symbol in symbols]),
+            source=source,
         )
     return presets
 
@@ -71,10 +75,38 @@ def resolve_preset_file(path: Path, base_dir: Path | None = None) -> Path:
     return candidates[0]
 
 
+def resolve_managed_universe(name: str, processed_dir: Path | None) -> list[str]:
+    from tradescope.data.universe_memberships import (
+        UniverseMembershipStore,
+        default_universe_memberships_path,
+    )
+
+    if processed_dir is None:
+        raise ValueError(
+            f"universe preset '{name}' is a managed universe and requires a data directory. "
+            f"Set data.processed_dir in your config."
+        )
+    path = default_universe_memberships_path(processed_dir)
+    if not path.exists():
+        raise ValueError(
+            f"universe preset '{name}' requires the membership store at '{path}'. "
+            f"Run 'tradescope data ingest-sp500' first to populate it."
+        )
+    store = UniverseMembershipStore(path)
+    symbols = store.all_symbols(name)
+    if not symbols:
+        raise ValueError(
+            f"universe preset '{name}' has no symbols in the membership store. "
+            f"Run 'tradescope data ingest-sp500' first to populate it."
+        )
+    return symbols
+
+
 def resolve_universe_symbols(
     explicit_symbols: list[str],
     universe: Any,
     base_dir: Path | None = None,
+    processed_dir: Path | None = None,
 ) -> list[str]:
     symbols = normalize_symbols(explicit_symbols)
     universe_symbols = normalize_symbols(list(getattr(universe, "symbols", [])))
@@ -87,7 +119,11 @@ def resolve_universe_symbols(
         for preset_name in preset_names:
             if preset_name not in presets:
                 raise ValueError(f"unknown universe preset '{preset_name}' in {preset_file}")
-            symbols.extend(presets[preset_name].symbols)
+            preset = presets[preset_name]
+            if preset.source == "membership_store":
+                symbols.extend(resolve_managed_universe(preset_name, processed_dir))
+            else:
+                symbols.extend(preset.symbols)
 
     symbols.extend(universe_symbols)
     resolved = [symbol for symbol in normalize_symbols(symbols) if symbol not in exclude]

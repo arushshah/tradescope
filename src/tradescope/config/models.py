@@ -158,5 +158,7 @@ def load_config(path: str | Path) -> BacktestConfig:
     with config_path.open("r", encoding="utf-8") as handle:
         raw = yaml.safe_load(handle) or {}
     config = BacktestConfig.model_validate(raw)
-    config.symbols = resolve_universe_symbols(config.symbols, config.universe, config_path.parent)
+    config.symbols = resolve_universe_symbols(
+        config.symbols, config.universe, config_path.parent, config.data.processed_dir
+    )
     return config

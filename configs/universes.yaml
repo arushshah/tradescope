@@ -1,3 +1,9 @@
+sp500:
+  description: >
+    S&P 500 historical constituents resolved from the membership store.
+    Requires: tradescope data ingest-sp500
+  source: membership_store
+
 index_etfs:
   description: Major US index-tracking ETFs.
   symbols:

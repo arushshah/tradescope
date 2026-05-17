@@ -11,7 +11,11 @@ from tradescope.backtesting.runner import BacktestRunner
 from tradescope.config import load_config
 from tradescope.data.alpha_vantage import fetch_listing_status
 from tradescope.data.collection_manifest import (
+    default_manifest_dir,
+    find_last_manifest,
+    list_manifests,
     write_config_collection_manifest,
+    write_security_master_manifest,
     write_store_update_manifest,
 )
 from tradescope.data.maintenance import (
@@ -36,6 +40,7 @@ from tradescope.data.universe_memberships import (
     build_us_listed_from_security_master,
     default_universe_memberships_path,
 )
+from tradescope.data.sp500 import fetch_sp500_changes, build_sp500_memberships
 from tradescope.data.store import MarketDataStore
 from tradescope.results.compare import (
     best_run_from_sweep,
@@ -302,6 +307,7 @@ def update_data(
 @click.option("--offset", type=click.IntRange(min=0), default=0, show_default=True)
 @click.option("--limit", type=click.IntRange(min=1), help="Collect only the first N matching symbols.")
 @click.option("--refresh", is_flag=True, help="Refetch existing data and components.")
+@click.option("--resume-last", is_flag=True, help="Resume from where the last collection run left off.")
 def collect_securities(
     processed_dir: Path,
     raw_dir: Path,
@@ -317,8 +323,19 @@ def collect_securities(
     offset: int,
     limit: int | None,
     refresh: bool,
+    resume_last: bool,
 ) -> None:
     """Collect market data for securities from the security master."""
+    if resume_last:
+        last = find_last_manifest(
+            default_manifest_dir(processed_dir),
+            kind="security_master_collection",
+        )
+        if last is None:
+            raise click.ClickException("no previous security_master_collection manifest found")
+        offset = (last.get("offset") or 0) + (last.get("symbols_requested") or 0)
+        click.echo(f"Resuming from offset {offset} (last run: {last.get('generated_at', '?')})")
+
     master = SecurityMaster(default_security_master_path(processed_dir))
     symbols = master.symbols(
         statuses=list(status),
@@ -330,6 +347,25 @@ def collect_securities(
     )
     if not symbols:
         raise click.ClickException("no matching securities found in security master")
+
+    skipped_unavailable = 0
+    if not refresh:
+        store = MarketDataStore(raw_dir, processed_dir)
+        unavailable_set = {
+            u.symbol
+            for u in store.list_unavailable()
+            if u.provider == "yfinance"
+            and u.start == start_date
+            and u.end == end_date
+            and u.interval == interval
+        }
+        if unavailable_set:
+            filtered = [s for s in symbols if s.upper() not in unavailable_set]
+            skipped_unavailable = len(symbols) - len(filtered)
+            symbols = filtered
+        if skipped_unavailable:
+            click.echo(f"Skipped {skipped_unavailable} already-unavailable symbol(s) (use --refresh to retry)")
+
     config, counts = update_symbols_dataset(
         symbols=symbols,
         start=date.fromisoformat(start_date),
@@ -341,7 +377,9 @@ def collect_securities(
         components=list(components),
         refresh=refresh,
     )
-    manifest_path = write_config_collection_manifest(config, counts)
+    manifest_path = write_security_master_manifest(
+        config, counts, offset=offset, limit=limit, skipped_unavailable=skipped_unavailable
+    )
     click.echo(f"Matched security master symbol(s): {len(symbols)}")
     click.echo(f"Updated OHLCV for {counts['ohlcv_symbols']} symbol(s)")
     if counts["component_files"]:
@@ -702,6 +740,49 @@ def universe_members(universe_name: str, as_of_date: str, processed_dir: Path) -
         click.echo(f"  {symbol}")
 
 
+@data_universe.command("ingest-sp500")
+@click.option(
+    "--cache-path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Local path to cache the downloaded CSV (avoids re-downloading).",
+)
+@click.option(
+    "--as-of",
+    "as_of_date",
+    default=None,
+    help="Source as-of date (YYYY-MM-DD). Defaults to today.",
+)
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+def universe_ingest_sp500(cache_path: Path | None, as_of_date: str | None, processed_dir: Path) -> None:
+    """Ingest S&P 500 historical constituents from fja05680/sp500 on GitHub.
+
+    Downloads a changes CSV (~1996-present) and converts it to universe
+    membership records stored in universe_memberships.parquet.
+
+    Use --cache-path to save the CSV locally and avoid re-downloading.
+    """
+    from datetime import date as _date
+
+    effective_as_of = as_of_date or _date.today().isoformat()
+    click.echo("Downloading S&P 500 changes CSV...")
+    try:
+        changes = fetch_sp500_changes(cache_path=cache_path)
+    except Exception as exc:
+        raise click.ClickException(f"failed to fetch S&P 500 changes: {exc}") from exc
+    click.echo(f"Loaded {len(changes)} change row(s)")
+    memberships = build_sp500_memberships(changes, source_as_of_date=effective_as_of)
+    store = UniverseMembershipStore(default_universe_memberships_path(processed_dir))
+    count = store.upsert(memberships)
+    click.echo(f"Upserted {count} membership record(s) into universe 'sp500'")
+    click.echo(f"Path: {store.path}")
+
+
 @data_universe.command("show")
 @click.option("--universe", "universe_name", default=None, help="Filter to one universe.")
 @click.option(
@@ -720,6 +801,70 @@ def universe_show(universe_name: str | None, processed_dir: Path) -> None:
     click.echo(frame.to_string(index=False))
 
 
+@data.command("status")
+@click.option("--processed-dir", default="data/processed", show_default=True, type=click.Path())
+def data_status(processed_dir: str) -> None:
+    """Show the state of each data pipeline stage."""
+    processed_path = Path(processed_dir)
+
+    click.echo("Pipeline status")
+
+    # Security master
+    sm_path = default_security_master_path(processed_path)
+    if sm_path.exists():
+        sm = SecurityMaster(sm_path)
+        sm_frame = sm.read()
+        sm_count = len(sm_frame[sm_frame["provider"] == "security_master"]) if not sm_frame.empty else 0
+        click.echo(f"  Security master    {sm_count} symbols")
+    else:
+        click.echo("  Security master    not found")
+
+    # Universe membership store
+    memberships_path = default_universe_memberships_path(processed_path)
+    has_membership_data = False
+    has_sp500_data = False
+    if memberships_path.exists():
+        store = UniverseMembershipStore(memberships_path)
+        um_frame = store.read()
+        if not um_frame.empty:
+            has_membership_data = True
+            for universe_name, group in um_frame.groupby("universe"):
+                symbol_count = group["symbol"].nunique()
+                last_ingested = group["source_as_of_date"].max() if "source_as_of_date" in group.columns else None
+                if last_ingested:
+                    click.echo(f"  Universe {universe_name:<10} {symbol_count} symbols   (last ingested: {last_ingested})")
+                else:
+                    click.echo(f"  Universe {universe_name:<10} {symbol_count} symbols")
+                if universe_name == "sp500":
+                    has_sp500_data = True
+        else:
+            click.echo("  Universe store     empty")
+    else:
+        click.echo("  Universe store     not found")
+
+    # OHLCV processed data
+    ohlcv_count = 0
+    if processed_path.exists():
+        store_obj = MarketDataStore(processed_path.parent / "raw", processed_path)
+        entries = store_obj.list_entries(layer="processed")
+        ohlcv_symbols = {entry.symbol for entry in entries}
+        ohlcv_count = len(ohlcv_symbols)
+    click.echo(f"  OHLCV processed    {ohlcv_count} symbols")
+
+    # Next steps
+    next_steps = []
+    if not has_membership_data:
+        next_steps.append("No membership data found — run: tradescope data universe ingest-sp500")
+    elif has_sp500_data and ohlcv_count == 0:
+        next_steps.append("S&P 500 membership data found but no OHLCV — run: tradescope data collect-securities")
+
+    if next_steps:
+        click.echo("")
+        click.echo("Next steps:")
+        for step in next_steps:
+            click.echo(f"  {step}")
+
+
 @data.command("validate")
 @click.option("--config", "config_path", required=True, type=click.Path(exists=True, path_type=Path))
 def validate_data(config_path: Path) -> None:
@@ -732,6 +877,70 @@ def validate_data(config_path: Path) -> None:
     click.echo(summary.to_string(index=False))
     if any(report.status != "ok" for report in reports):
         raise click.ClickException("data validation completed with warnings")
+
+
+# ---------------------------------------------------------------------------
+# data manifests
+# ---------------------------------------------------------------------------
+
+@data.group("manifests", invoke_without_command=True)
+@click.option(
+    "--n",
+    default=10,
+    show_default=True,
+    help="Number of recent manifests to show.",
+)
+@click.option(
+    "--manifest-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+)
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+@click.pass_context
+def data_manifests(ctx: click.Context, n: int, manifest_dir: Path | None, processed_dir: Path) -> None:
+    """Browse collection manifests."""
+    if ctx.invoked_subcommand is not None:
+        return
+    effective_dir = manifest_dir or default_manifest_dir(processed_dir)
+    entries = list_manifests(effective_dir, n=n)
+    if not entries:
+        click.echo("No manifests found.")
+        return
+    click.echo(f"{'Filename':<50}  {'Kind':<30}  {'Generated'}")
+    click.echo("-" * 100)
+    for path, payload in entries:
+        kind = payload.get("kind", "unknown")
+        generated_at = payload.get("generated_at", "")[:19]
+        click.echo(f"{path.name:<50}  {kind:<30}  {generated_at}")
+
+
+@data_manifests.command("show")
+@click.argument("manifest_id")
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+def manifests_show(manifest_id: str, processed_dir: Path) -> None:
+    """Show full details of a specific manifest.
+
+    MANIFEST_ID is the filename (with or without .json) or a full path.
+    """
+    manifest_dir = default_manifest_dir(processed_dir)
+    path = Path(manifest_id)
+    if not path.is_absolute():
+        if not path.suffix:
+            path = path.with_suffix(".json")
+        path = manifest_dir / path
+    if not path.exists():
+        raise click.ClickException(f"manifest not found: {path}")
+    click.echo(path.read_text(encoding="utf-8"))
 
 
 @cli.group()

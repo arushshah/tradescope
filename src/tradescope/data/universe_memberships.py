@@ -29,7 +29,7 @@ class UniverseMembershipStore:
     def upsert(self, memberships: list[UniverseMembership]) -> int:
         records = self._read_records()
         for membership in memberships:
-            key = _membership_key(membership.universe, membership.symbol, membership.source)
+            key = _membership_key(membership.universe, membership.symbol, membership.source, membership.start_date)
             records[key] = {
                 "universe": membership.universe,
                 "symbol": membership.symbol.upper(),
@@ -41,6 +41,13 @@ class UniverseMembershipStore:
             }
         self._write_records(records)
         return len(memberships)
+
+    def all_symbols(self, universe: str) -> list[str]:
+        """Return all symbols that have ever been in `universe`."""
+        frame = self.read(universe=universe)
+        if frame.empty:
+            return []
+        return sorted(frame["symbol"].unique().tolist())
 
     def members_on(self, universe: str, as_of_date: date) -> list[str]:
         frame = self.read(universe=universe)
@@ -70,7 +77,12 @@ class UniverseMembershipStore:
             return {}
         frame = pd.read_parquet(self.path)
         return {
-            _membership_key(str(row["universe"]), str(row["symbol"]), str(row["source"])): row.dropna().to_dict()
+            _membership_key(
+                str(row["universe"]),
+                str(row["symbol"]),
+                str(row["source"]),
+                str(row.get("start_date", "")),
+            ): row.dropna().to_dict()
             for _, row in frame.iterrows()
         }
 
@@ -123,8 +135,8 @@ def default_universe_memberships_path(processed_dir: Path) -> Path:
     return processed_dir.parent / "universe_memberships.parquet"
 
 
-def _membership_key(universe: str, symbol: str, source: str) -> str:
-    return f"{universe}:{symbol.upper()}:{source}"
+def _membership_key(universe: str, symbol: str, source: str, start_date: str = "") -> str:
+    return f"{universe}:{symbol.upper()}:{source}:{start_date}"
 
 
 def _has_value(value) -> bool:
