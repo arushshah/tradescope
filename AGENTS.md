@@ -88,6 +88,13 @@ The file `trading-strategies-list.pdf` is intentionally tracked as a reference d
 
 Never delete local data or results unless the user explicitly asks.
 
+Use a rebase-first Git workflow:
+
+- Prefer `git pull --rebase` instead of merge pulls.
+- Prefer rebasing local work onto `origin/main` before pushing.
+- Avoid merge commits for routine synchronization.
+- Do not run force-pushes or history rewrites unless the user explicitly asks.
+
 ## Engineering Principles
 
 - Prefer existing libraries over custom implementations.
