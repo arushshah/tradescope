@@ -514,10 +514,6 @@ actions
 dividends
 splits
 capital_gains
-fast_info
-info
-history_metadata
-calendar
 income_stmt
 quarterly_income_stmt
 ttm_income_stmt
@@ -530,6 +526,17 @@ earnings
 quarterly_earnings
 earnings_dates
 earnings_history
+```
+
+`research_bundle` expands to corporate actions, dividends, splits, capital gains, all income statements, all balance sheets, all cash flows, and reported earnings data. Backtests currently require `ohlcv`; other components are collected under `data/components` for future strategy research.
+
+Additional yfinance components can be requested explicitly when needed:
+
+```text
+fast_info
+info
+history_metadata
+calendar
 earnings_estimate
 growth_estimates
 recommendations
@@ -545,7 +552,7 @@ options
 option_chains
 ```
 
-`research_bundle` expands to the broad research set above except `option_chains`. `all` includes that expensive option-chain collection too. Backtests currently require `ohlcv`; other components are collected under `data/components` for future strategy research.
+`all` includes every supported component, including the expensive option-chain collection.
 
 If a provider returns no rows for a symbol, TradeScope records that symbol in `data/processed/_unavailable_symbols.json`, skips it for future matching requests, and continues loading the rest of the universe.
 
