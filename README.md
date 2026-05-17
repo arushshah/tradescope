@@ -319,11 +319,25 @@ Update canonical data coverage for a universe:
 .venv/bin/tradescope data update --config configs/examples/data_sp500_canonical.yaml --to-today
 ```
 
+Update every processed OHLCV dataset already stored locally:
+
+```bash
+.venv/bin/tradescope data update --all
+.venv/bin/tradescope data update --all --provider yfinance --interval 1d
+```
+
 Audit canonical data coverage and repair symbols with missing coverage or quality warnings:
 
 ```bash
 .venv/bin/tradescope data audit --config configs/examples/data_sp500_canonical.yaml
 .venv/bin/tradescope data audit --config configs/examples/data_sp500_canonical.yaml --fix
+```
+
+Audit and repair every processed OHLCV dataset already stored locally:
+
+```bash
+.venv/bin/tradescope data audit --all
+.venv/bin/tradescope data audit --all --fix
 ```
 
 Inspect local data:

@@ -3,6 +3,7 @@ from datetime import date
 import pandas as pd
 
 from tradescope.data.quality import build_quality_report
+from tradescope.data.maintenance import update_stored_dataset
 from tradescope.data.store import MarketDataStore
 from tradescope.data.yfinance_provider import normalize_yfinance_frame
 
@@ -114,6 +115,58 @@ def test_market_data_store_marks_unavailable_symbols(tmp_path) -> None:
     )
 
     assert different_window is None
+
+
+def test_update_stored_dataset_extends_existing_processed_data(tmp_path, monkeypatch) -> None:
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    index = pd.date_range("2024-01-01", "2024-01-02", freq="D", name="timestamp")
+    existing = pd.DataFrame(
+        {
+            "open": [1.0, 2.0],
+            "high": [2.0, 3.0],
+            "low": [0.5, 1.5],
+            "close": [1.5, 2.5],
+            "adj_close": [1.5, 2.5],
+            "volume": [100, 100],
+            "symbol": "SPY",
+            "source": "test",
+        },
+        index=index,
+    )
+    store.write_processed("yfinance", "SPY", date(2024, 1, 1), date(2024, 1, 3), "1d", existing)
+
+    def fake_fetch_raw(_self, symbols, start, end, interval):
+        assert symbols == ["SPY"]
+        assert start == date(2024, 1, 3)
+        assert end == date(2024, 1, 5)
+        assert interval == "1d"
+        raw_index = pd.date_range("2024-01-03", "2024-01-04", freq="D", name="timestamp")
+        return {
+            "SPY": pd.DataFrame(
+                {
+                    "Open": [3.0, 4.0],
+                    "High": [4.0, 5.0],
+                    "Low": [2.5, 3.5],
+                    "Close": [3.5, 4.5],
+                    "Adj Close": [3.5, 4.5],
+                    "Volume": [100, 100],
+                },
+                index=raw_index,
+            )
+        }
+
+    monkeypatch.setattr("tradescope.data.yfinance_provider.YFinanceProvider.fetch_raw", fake_fetch_raw)
+
+    counts = update_stored_dataset(
+        tmp_path / "raw",
+        tmp_path / "processed",
+        end=date(2024, 1, 5),
+    )
+    updated = store.read_processed("yfinance", "SPY", date(2024, 1, 1), date(2024, 1, 5), "1d")
+
+    assert counts == {"ohlcv_symbols": 1, "skipped_symbols": 0}
+    assert updated is not None
+    assert list(updated.index) == list(pd.date_range("2024-01-01", "2024-01-04", freq="D"))
 
 
 def test_build_quality_report_warns_on_missing_close() -> None:

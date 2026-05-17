@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from typing import Iterable
 
@@ -10,12 +11,16 @@ from tradescope.backtesting.runner import BacktestRunner
 from tradescope.config import load_config
 from tradescope.data.maintenance import (
     audit_dataset,
+    audit_stored_dataset,
     default_update_end,
     fetch_configured_components,
+    repair_stored_dataset,
     refresh_symbols,
     rows_to_frame,
+    stored_rows_needing_repair,
     symbols_needing_repair,
     update_dataset,
+    update_stored_dataset,
 )
 from tradescope.data.quality import build_quality_report, reports_to_frame
 from tradescope.data.store import MarketDataStore
@@ -207,16 +212,45 @@ def fetch_data_from_config(config_path: Path) -> None:
 
 
 @data.command("update")
-@click.option("--config", "config_path", required=True, type=click.Path(exists=True, path_type=Path))
+@click.option("--config", "config_path", type=click.Path(exists=True, path_type=Path))
+@click.option("--all", "all_entries", is_flag=True, help="Update every processed OHLCV dataset already stored locally.")
+@click.option("--raw-dir", type=click.Path(file_okay=False, path_type=Path), default=Path("data/raw"), show_default=True)
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+@click.option("--provider", help="Only update datasets from this provider.")
+@click.option("--interval", help="Only update datasets with this interval.")
+@click.option("--end", "end_date", callback=lambda _ctx, _param, value: date.fromisoformat(value) if value else None)
 @click.option(
     "--to-today",
     is_flag=True,
     help="Extend canonical coverage through the current run date instead of config data.coverage_end.",
 )
-def update_data(config_path: Path, to_today: bool) -> None:
-    """Update canonical local data coverage for a config."""
+def update_data(
+    config_path: Path | None,
+    all_entries: bool,
+    raw_dir: Path,
+    processed_dir: Path,
+    provider: str | None,
+    interval: str | None,
+    end_date: date | None,
+    to_today: bool,
+) -> None:
+    """Update config-scoped or store-wide local data coverage."""
+    if all_entries:
+        end = end_date or default_update_end()
+        counts = update_stored_dataset(raw_dir, processed_dir, provider, interval, end=end)
+        click.echo(f"Updated OHLCV dataset(s): {counts['ohlcv_symbols']}")
+        if counts["skipped_symbols"]:
+            click.echo(f"Skipped dataset(s): {counts['skipped_symbols']}")
+        return
+    if config_path is None:
+        raise click.ClickException("provide --config for config-scoped updates or --all for store-wide updates")
     config = load_config(config_path)
-    end = default_update_end() if to_today else None
+    end = end_date or (default_update_end() if to_today else None)
     counts = update_dataset(config, end=end)
     click.echo(f"Updated OHLCV for {counts['ohlcv_symbols']} symbol(s)")
     if counts["component_files"]:
@@ -224,10 +258,48 @@ def update_data(config_path: Path, to_today: bool) -> None:
 
 
 @data.command("audit")
-@click.option("--config", "config_path", required=True, type=click.Path(exists=True, path_type=Path))
+@click.option("--config", "config_path", type=click.Path(exists=True, path_type=Path))
+@click.option("--all", "all_entries", is_flag=True, help="Audit every processed OHLCV dataset already stored locally.")
+@click.option("--raw-dir", type=click.Path(file_okay=False, path_type=Path), default=Path("data/raw"), show_default=True)
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+@click.option("--provider", help="Only audit datasets from this provider.")
+@click.option("--interval", help="Only audit datasets with this interval.")
 @click.option("--fix", is_flag=True, help="Refresh symbols with missing coverage or quality warnings.")
-def audit_data(config_path: Path, fix: bool) -> None:
-    """Audit canonical local data coverage and optionally repair problem symbols."""
+def audit_data(
+    config_path: Path | None,
+    all_entries: bool,
+    raw_dir: Path,
+    processed_dir: Path,
+    provider: str | None,
+    interval: str | None,
+    fix: bool,
+) -> None:
+    """Audit config-scoped or store-wide local data coverage."""
+    if all_entries:
+        rows = audit_stored_dataset(raw_dir, processed_dir, provider, interval)
+        if not rows:
+            click.echo("No processed data entries found.")
+            return
+        frame = rows_to_frame(rows)
+        click.echo(frame.to_string(index=False))
+        repair_rows = stored_rows_needing_repair(rows)
+        if not repair_rows:
+            click.echo("Data audit passed.")
+            return
+        click.echo(f"Dataset(s) needing repair: {len(repair_rows)}")
+        if fix:
+            repaired = repair_stored_dataset(raw_dir, processed_dir, provider, interval)
+            click.echo(f"Repaired {repaired} dataset(s)")
+        else:
+            raise click.ClickException("data audit found issues")
+        return
+    if config_path is None:
+        raise click.ClickException("provide --config for config-scoped audits or --all for store-wide audits")
     config = load_config(config_path)
     rows = audit_dataset(config)
     frame = rows_to_frame(rows)

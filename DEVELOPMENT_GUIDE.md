@@ -1330,6 +1330,21 @@ Fetch data:
 .venv/bin/tradescope data fetch --config configs/examples/ma_cross.yaml
 ```
 
+Update data:
+
+```bash
+.venv/bin/tradescope data update --config configs/examples/data_sp500_canonical.yaml
+.venv/bin/tradescope data update --all
+```
+
+Audit data:
+
+```bash
+.venv/bin/tradescope data audit --config configs/examples/data_sp500_canonical.yaml
+.venv/bin/tradescope data audit --all
+.venv/bin/tradescope data audit --all --fix
+```
+
 Inspect data:
 
 ```bash

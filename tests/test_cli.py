@@ -1,6 +1,8 @@
 from click.testing import CliRunner
+import pandas as pd
 
 from tradescope.cli import cli
+from tradescope.data.store import MarketDataStore
 
 
 def test_top_level_help_lists_documented_commands():
@@ -65,6 +67,55 @@ def test_reference_lists_full_command_tree():
     assert "tradescope data clear" in result.output
     assert "tradescope fetch" not in result.output
     assert "tradescope clear-data" not in result.output
+
+
+def test_data_audit_all_audits_stored_processed_data(tmp_path):
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    index = pd.date_range("2024-01-01", "2024-01-05", freq="D", name="timestamp")
+    store.write_processed(
+        "yfinance",
+        "SPY",
+        index.min().date(),
+        pd.Timestamp("2024-01-06").date(),
+        "1d",
+        pd.DataFrame(
+            {
+                "open": 1.0,
+                "high": 2.0,
+                "low": 0.5,
+                "close": 1.5,
+                "adj_close": 1.5,
+                "volume": 100,
+                "symbol": "SPY",
+                "source": "test",
+            },
+            index=index,
+        ),
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data",
+            "audit",
+            "--all",
+            "--raw-dir",
+            str(tmp_path / "raw"),
+            "--processed-dir",
+            str(tmp_path / "processed"),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "SPY" in result.output
+    assert "Data audit passed." in result.output
+
+
+def test_data_update_requires_config_or_all():
+    result = CliRunner().invoke(cli, ["data", "update"])
+
+    assert result.exit_code != 0
+    assert "provide --config" in result.output
 
 
 def test_universe_commands_show_presets():
