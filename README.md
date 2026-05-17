@@ -338,6 +338,7 @@ Collect market data for symbols selected from the security master:
 ```bash
 .venv/bin/tradescope data collect-securities
 .venv/bin/tradescope data collect-securities --status delisted --limit 100
+.venv/bin/tradescope data collect-securities --status delisted --offset 100 --limit 100
 .venv/bin/tradescope data collect-securities --exchange NASDAQ --asset-type Stock
 ```
 

@@ -293,6 +293,7 @@ def update_data(
 @click.option("--end", "end_date", default="2026-01-01", show_default=True)
 @click.option("--interval", default="1d", show_default=True)
 @click.option("--component", "components", multiple=True, default=["ohlcv", "research_bundle"], show_default=True)
+@click.option("--offset", type=click.IntRange(min=0), default=0, show_default=True)
 @click.option("--limit", type=click.IntRange(min=1), help="Collect only the first N matching symbols.")
 @click.option("--refresh", is_flag=True, help="Refetch existing data and components.")
 def collect_securities(
@@ -307,6 +308,7 @@ def collect_securities(
     end_date: str,
     interval: str,
     components: tuple[str, ...],
+    offset: int,
     limit: int | None,
     refresh: bool,
 ) -> None:
@@ -317,6 +319,7 @@ def collect_securities(
         exchanges=list(exchange) or None,
         asset_types=list(asset_type) or None,
         source=source,
+        offset=offset,
         limit=limit,
     )
     if not symbols:

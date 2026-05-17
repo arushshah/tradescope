@@ -1355,7 +1355,7 @@ Update data:
 .venv/bin/tradescope data update --config configs/examples/data_all_us_canonical.yaml --to-today
 .venv/bin/tradescope data update --all
 .venv/bin/tradescope data collect-securities --status active --exchange NASDAQ
-.venv/bin/tradescope data collect-securities --status delisted --limit 100
+.venv/bin/tradescope data collect-securities --status delisted --offset 0 --limit 100
 ```
 
 Audit data:

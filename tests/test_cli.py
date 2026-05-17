@@ -248,6 +248,8 @@ def test_data_collect_securities_fetches_from_security_master(tmp_path, monkeypa
             "2024-01-01",
             "--end",
             "2024-01-03",
+            "--offset",
+            "0",
             "--limit",
             "1",
         ],

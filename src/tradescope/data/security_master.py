@@ -43,6 +43,7 @@ class SecurityMaster:
         records = self._read_records()
         key = security_key(provider, symbol)
         existing = records.get(key, {})
+        listing = self._find_listing_metadata(records, symbol)
         history_start = timestamp_to_date_string(data.index.min()) if len(data) else None
         history_end = timestamp_to_date_string(data.index.max()) if len(data) else None
         status = infer_status(history_end, requested_end)
@@ -54,13 +55,13 @@ class SecurityMaster:
             "last_seen": now,
             "history_start": history_start,
             "history_end": history_end,
-            "name": existing.get("name"),
-            "exchange": existing.get("exchange"),
-            "asset_type": existing.get("asset_type"),
-            "ipo_date": existing.get("ipo_date"),
-            "delisting_date": existing.get("delisting_date"),
-            "listing_source": existing.get("listing_source"),
-            "listing_as_of_date": existing.get("listing_as_of_date"),
+            "name": existing.get("name") or listing.get("name"),
+            "exchange": existing.get("exchange") or listing.get("exchange"),
+            "asset_type": existing.get("asset_type") or listing.get("asset_type"),
+            "ipo_date": existing.get("ipo_date") or listing.get("ipo_date"),
+            "delisting_date": existing.get("delisting_date") or listing.get("delisting_date"),
+            "listing_source": existing.get("listing_source") or listing.get("listing_source"),
+            "listing_as_of_date": existing.get("listing_as_of_date") or listing.get("listing_as_of_date"),
             "reason": None,
         }
         self._write_records(records)
@@ -70,6 +71,7 @@ class SecurityMaster:
         records = self._read_records()
         key = security_key(provider, symbol)
         existing = records.get(key, {})
+        listing = self._find_listing_metadata(records, symbol)
         records[key] = {
             "provider": provider,
             "symbol": symbol.upper(),
@@ -78,13 +80,13 @@ class SecurityMaster:
             "last_seen": now,
             "history_start": existing.get("history_start"),
             "history_end": existing.get("history_end"),
-            "name": existing.get("name"),
-            "exchange": existing.get("exchange"),
-            "asset_type": existing.get("asset_type"),
-            "ipo_date": existing.get("ipo_date"),
-            "delisting_date": existing.get("delisting_date"),
-            "listing_source": existing.get("listing_source"),
-            "listing_as_of_date": existing.get("listing_as_of_date"),
+            "name": existing.get("name") or listing.get("name"),
+            "exchange": existing.get("exchange") or listing.get("exchange"),
+            "asset_type": existing.get("asset_type") or listing.get("asset_type"),
+            "ipo_date": existing.get("ipo_date") or listing.get("ipo_date"),
+            "delisting_date": existing.get("delisting_date") or listing.get("delisting_date"),
+            "listing_source": existing.get("listing_source") or listing.get("listing_source"),
+            "listing_as_of_date": existing.get("listing_as_of_date") or listing.get("listing_as_of_date"),
             "reason": reason,
         }
         self._write_records(records)
@@ -145,6 +147,7 @@ class SecurityMaster:
         exchanges: list[str] | None = None,
         asset_types: list[str] | None = None,
         source: str | None = None,
+        offset: int = 0,
         limit: int | None = None,
     ) -> list[str]:
         frame = self.read()
@@ -163,6 +166,8 @@ class SecurityMaster:
         if source:
             filtered = filtered[filtered["listing_source"] == source]
         symbols = filtered["symbol"].dropna().drop_duplicates().sort_values().tolist()
+        if offset:
+            symbols = symbols[offset:]
         if limit is not None:
             symbols = symbols[:limit]
         return symbols
@@ -175,6 +180,9 @@ class SecurityMaster:
             security_key(str(row["provider"]), str(row["symbol"])): row.dropna().to_dict()
             for _, row in frame.iterrows()
         }
+
+    def _find_listing_metadata(self, records: dict[str, dict], symbol: str) -> dict:
+        return records.get(security_key("security_master", symbol), {})
 
     def _write_records(self, records: dict[str, dict]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

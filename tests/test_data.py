@@ -235,6 +235,93 @@ def test_security_master_upserts_alpha_vantage_listing_status(tmp_path) -> None:
     assert security_master.loc[0, "delisting_date"] == "2020-01-01"
     assert security_master.loc[0, "listing_source"] == "alpha_vantage_listing_status"
     assert store.security_master.symbols(statuses=["delisted"], exchanges=["NYSE"]) == ["OLD"]
+    assert store.security_master.symbols(statuses=["delisted"], offset=1) == []
+
+
+def test_security_master_copies_listing_metadata_to_price_history(tmp_path) -> None:
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    store.security_master.upsert_listing_status(
+        [
+            ListingStatusRecord(
+                symbol="OLD",
+                name="Old Co",
+                exchange="NYSE",
+                asset_type="Stock",
+                ipo_date="2000-01-01",
+                delisting_date="2020-01-01",
+                status="delisted",
+                source="alpha_vantage_listing_status",
+                as_of_date="2026-05-17",
+            )
+        ]
+    )
+
+    store.write_processed(
+        "yfinance",
+        "OLD",
+        date(2010, 1, 1),
+        date(2026, 1, 1),
+        "1d",
+        pd.DataFrame(
+            {"close": [1.0], "symbol": "OLD"},
+            index=pd.DatetimeIndex(["2019-12-31"], name="timestamp"),
+        ),
+    )
+
+    security_master = store.security_master.read()
+    row = security_master[
+        (security_master["provider"] == "yfinance") & (security_master["symbol"] == "OLD")
+    ].iloc[0]
+    assert row["status"] == "historical"
+    assert row["name"] == "Old Co"
+    assert row["exchange"] == "NYSE"
+    assert row["asset_type"] == "Stock"
+    assert row["ipo_date"] == "2000-01-01"
+    assert row["delisting_date"] == "2020-01-01"
+    assert row["listing_source"] == "alpha_vantage_listing_status"
+    assert row["listing_as_of_date"] == "2026-05-17"
+
+
+def test_security_master_copies_listing_metadata_to_unavailable_symbols(tmp_path) -> None:
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    store.security_master.upsert_listing_status(
+        [
+            ListingStatusRecord(
+                symbol="BAD",
+                name="Bad Co",
+                exchange="NASDAQ",
+                asset_type="Stock",
+                ipo_date="2001-01-01",
+                delisting_date="2021-01-01",
+                status="delisted",
+                source="alpha_vantage_listing_status",
+                as_of_date="2026-05-17",
+            )
+        ]
+    )
+
+    store.mark_unavailable(
+        "yfinance",
+        "BAD",
+        date(2010, 1, 1),
+        date(2026, 1, 1),
+        "1d",
+        "no rows",
+    )
+
+    security_master = store.security_master.read()
+    row = security_master[
+        (security_master["provider"] == "yfinance") & (security_master["symbol"] == "BAD")
+    ].iloc[0]
+    assert row["status"] == "unavailable"
+    assert row["name"] == "Bad Co"
+    assert row["exchange"] == "NASDAQ"
+    assert row["asset_type"] == "Stock"
+    assert row["ipo_date"] == "2001-01-01"
+    assert row["delisting_date"] == "2021-01-01"
+    assert row["listing_source"] == "alpha_vantage_listing_status"
+    assert row["listing_as_of_date"] == "2026-05-17"
+    assert row["reason"] == "no rows"
 
 
 def test_parse_alpha_vantage_listing_status_csv() -> None:
