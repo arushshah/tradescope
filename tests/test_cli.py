@@ -354,3 +354,79 @@ def test_universe_commands_show_presets():
     assert show_result.exit_code == 0
     assert "AAPL" in show_result.output
     assert "BRK-B" in show_result.output
+
+
+def test_data_universe_build_creates_us_listed_memberships(tmp_path):
+    from tradescope.data.alpha_vantage import ListingStatusRecord
+    from tradescope.data.store import MarketDataStore
+
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    store.security_master.upsert_listing_status([
+        ListingStatusRecord("AAPL", "Apple", "NASDAQ", "Stock", "1980-12-12", None, "Active", "test", "2026-01-01"),
+        ListingStatusRecord("ENRN", "Enron", "NYSE", "Stock", "1985-11-01", "2001-12-02", "Delisted", "test", "2026-01-01"),
+    ])
+
+    result = CliRunner().invoke(
+        cli,
+        ["data", "universe", "build", "--processed-dir", str(tmp_path / "processed"), "--as-of", "2026-01-01"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "2 membership(s)" in result.output
+
+
+def test_data_universe_members_returns_active_symbols(tmp_path):
+    from tradescope.data.alpha_vantage import ListingStatusRecord
+    from tradescope.data.store import MarketDataStore
+
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    store.security_master.upsert_listing_status([
+        ListingStatusRecord("AAPL", "Apple", "NASDAQ", "Stock", "1980-12-12", None, "Active", "test", "2026-01-01"),
+        ListingStatusRecord("ENRN", "Enron", "NYSE", "Stock", "1985-11-01", "2001-12-02", "Delisted", "test", "2026-01-01"),
+    ])
+    CliRunner().invoke(
+        cli,
+        ["data", "universe", "build", "--processed-dir", str(tmp_path / "processed"), "--as-of", "2026-01-01"],
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data", "universe", "members",
+            "--universe", "us_listed",
+            "--as-of", "2000-01-01",
+            "--processed-dir", str(tmp_path / "processed"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "AAPL" in result.output
+    assert "ENRN" in result.output
+
+
+def test_data_universe_members_excludes_post_delisting(tmp_path):
+    from tradescope.data.alpha_vantage import ListingStatusRecord
+    from tradescope.data.store import MarketDataStore
+
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    store.security_master.upsert_listing_status([
+        ListingStatusRecord("ENRN", "Enron", "NYSE", "Stock", "1985-11-01", "2001-12-02", "Delisted", "test", "2026-01-01"),
+    ])
+    CliRunner().invoke(
+        cli,
+        ["data", "universe", "build", "--processed-dir", str(tmp_path / "processed"), "--as-of", "2026-01-01"],
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data", "universe", "members",
+            "--universe", "us_listed",
+            "--as-of", "2005-01-01",
+            "--processed-dir", str(tmp_path / "processed"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "ENRN" not in result.output
+    assert "No members found" in result.output

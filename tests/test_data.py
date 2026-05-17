@@ -810,3 +810,123 @@ def test_build_quality_report_warns_on_missing_close() -> None:
 
     assert report.status == "warning"
     assert report.missing_close == 1
+
+
+# ---------------------------------------------------------------------------
+# Universe membership tests
+# ---------------------------------------------------------------------------
+
+def test_universe_membership_store_upsert_and_read(tmp_path) -> None:
+    from tradescope.data.universe_memberships import UniverseMembership, UniverseMembershipStore
+
+    store = UniverseMembershipStore(tmp_path / "universe_memberships.parquet")
+    store.upsert([
+        UniverseMembership("us_listed", "AAPL", "1980-12-12", None, "security_master", "2026-01-01"),
+        UniverseMembership("us_listed", "ENRN", "1985-11-01", "2001-12-02", "security_master", "2026-01-01"),
+    ])
+
+    frame = store.read()
+    assert len(frame) == 2
+    assert set(frame["symbol"]) == {"AAPL", "ENRN"}
+
+
+def test_universe_members_on_includes_active_symbol(tmp_path) -> None:
+    from tradescope.data.universe_memberships import UniverseMembership, UniverseMembershipStore
+
+    store = UniverseMembershipStore(tmp_path / "universe_memberships.parquet")
+    store.upsert([UniverseMembership("us_listed", "AAPL", "1980-12-12", None, "security_master", "2026-01-01")])
+
+    members = store.members_on("us_listed", date(2018, 6, 15))
+    assert "AAPL" in members
+
+
+def test_universe_members_on_excludes_not_yet_listed(tmp_path) -> None:
+    from tradescope.data.universe_memberships import UniverseMembership, UniverseMembershipStore
+
+    store = UniverseMembershipStore(tmp_path / "universe_memberships.parquet")
+    store.upsert([UniverseMembership("us_listed", "NEWCO", "2020-01-01", None, "security_master", "2026-01-01")])
+
+    members = store.members_on("us_listed", date(2019, 12, 31))
+    assert "NEWCO" not in members
+
+
+def test_universe_members_on_excludes_delisted_symbol(tmp_path) -> None:
+    from tradescope.data.universe_memberships import UniverseMembership, UniverseMembershipStore
+
+    store = UniverseMembershipStore(tmp_path / "universe_memberships.parquet")
+    store.upsert([UniverseMembership("us_listed", "ENRN", "1985-11-01", "2001-12-02", "security_master", "2026-01-01")])
+
+    assert "ENRN" not in store.members_on("us_listed", date(2002, 1, 1))
+    assert "ENRN" in store.members_on("us_listed", date(2001, 6, 1))
+
+
+def test_universe_members_on_includes_delisted_on_delisting_date(tmp_path) -> None:
+    from tradescope.data.universe_memberships import UniverseMembership, UniverseMembershipStore
+
+    store = UniverseMembershipStore(tmp_path / "universe_memberships.parquet")
+    store.upsert([UniverseMembership("us_listed", "ENRN", "1985-11-01", "2001-12-02", "security_master", "2026-01-01")])
+
+    # Should be included on the exact delisting date (inclusive end).
+    assert "ENRN" in store.members_on("us_listed", date(2001, 12, 2))
+
+
+def test_universe_members_on_empty_when_no_memberships(tmp_path) -> None:
+    from tradescope.data.universe_memberships import UniverseMembershipStore
+
+    store = UniverseMembershipStore(tmp_path / "universe_memberships.parquet")
+    assert store.members_on("us_listed", date(2020, 1, 1)) == []
+
+
+def test_build_us_listed_uses_ipo_date_as_start(tmp_path) -> None:
+    from tradescope.data.alpha_vantage import ListingStatusRecord
+    from tradescope.data.security_master import SecurityMaster, default_security_master_path
+    from tradescope.data.universe_memberships import build_us_listed_from_security_master
+
+    master = SecurityMaster(default_security_master_path(tmp_path / "processed"))
+    master.upsert_listing_status([
+        ListingStatusRecord(
+            symbol="AAPL",
+            name="Apple",
+            exchange="NASDAQ",
+            asset_type="Stock",
+            ipo_date="1980-12-12",
+            delisting_date=None,
+            status="Active",
+            source="test",
+            as_of_date="2026-01-01",
+        )
+    ])
+
+    memberships = build_us_listed_from_security_master(master, "2026-01-01")
+    assert len(memberships) == 1
+    m = memberships[0]
+    assert m.symbol == "AAPL"
+    assert m.start_date == "1980-12-12"
+    assert m.end_date is None
+    assert m.universe == "us_listed"
+
+
+def test_build_us_listed_sets_end_date_for_delisted(tmp_path) -> None:
+    from tradescope.data.alpha_vantage import ListingStatusRecord
+    from tradescope.data.security_master import SecurityMaster, default_security_master_path
+    from tradescope.data.universe_memberships import build_us_listed_from_security_master
+
+    master = SecurityMaster(default_security_master_path(tmp_path / "processed"))
+    master.upsert_listing_status([
+        ListingStatusRecord(
+            symbol="ENRN",
+            name="Enron",
+            exchange="NYSE",
+            asset_type="Stock",
+            ipo_date="1985-11-01",
+            delisting_date="2001-12-02",
+            status="Delisted",
+            source="test",
+            as_of_date="2026-01-01",
+        )
+    ])
+
+    memberships = build_us_listed_from_security_master(master, "2026-01-01")
+    assert len(memberships) == 1
+    m = memberships[0]
+    assert m.end_date == "2001-12-02"

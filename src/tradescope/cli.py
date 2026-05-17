@@ -31,6 +31,11 @@ from tradescope.data.maintenance import (
 from tradescope.data.quality import build_quality_report, reports_to_frame
 from tradescope.data.security_master import SecurityMaster, default_security_master_path
 from tradescope.data.symbol_mapping import SymbolMap, default_symbol_map_path
+from tradescope.data.universe_memberships import (
+    UniverseMembershipStore,
+    build_us_listed_from_security_master,
+    default_universe_memberships_path,
+)
 from tradescope.data.store import MarketDataStore
 from tradescope.results.compare import (
     best_run_from_sweep,
@@ -615,6 +620,104 @@ def clear_data_entries(
         click.confirm(f"Remove {len(entries)} data file(s) from {layer_label} for {target}?", abort=True)
     removed = store.clear(layer=layer, symbol=symbol)
     click.echo(f"Removed {len(removed)} data file(s).")
+
+
+@data.group("universe", invoke_without_command=True)
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+@click.pass_context
+def data_universe(ctx: click.Context, processed_dir: Path) -> None:
+    """Manage historical universe membership snapshots."""
+    if ctx.invoked_subcommand is not None:
+        return
+    store = UniverseMembershipStore(default_universe_memberships_path(processed_dir))
+    frame = store.read()
+    if frame.empty:
+        click.echo("No universe memberships found.")
+        return
+    summary = (
+        frame.groupby("universe")
+        .agg(symbols=("symbol", "count"), source=("source", "first"))
+        .reset_index()
+    )
+    click.echo(summary.to_string(index=False))
+
+
+@data_universe.command("build")
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+@click.option(
+    "--as-of",
+    "as_of_date",
+    default=None,
+    help="Date the security master was current (YYYY-MM-DD). Defaults to today.",
+)
+def universe_build(processed_dir: Path, as_of_date: str | None) -> None:
+    """Build the us_listed universe from the security master."""
+    from datetime import date as _date
+
+    effective_as_of = as_of_date or _date.today().isoformat()
+    master = SecurityMaster(default_security_master_path(processed_dir))
+    memberships = build_us_listed_from_security_master(master, effective_as_of)
+    if not memberships:
+        raise click.ClickException("no securities found in security master")
+    store = UniverseMembershipStore(default_universe_memberships_path(processed_dir))
+    count = store.upsert(memberships)
+    click.echo(f"Upserted {count} membership(s) into universe 'us_listed'")
+    click.echo(f"Path: {store.path}")
+
+
+@data_universe.command("members")
+@click.option("--universe", "universe_name", required=True, help="Universe name (e.g. us_listed).")
+@click.option("--as-of", "as_of_date", required=True, help="Query date (YYYY-MM-DD).")
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+def universe_members(universe_name: str, as_of_date: str, processed_dir: Path) -> None:
+    """List symbols that were members of a universe on a given date."""
+    from datetime import date as _date
+
+    try:
+        query_date = _date.fromisoformat(as_of_date)
+    except ValueError as exc:
+        raise click.ClickException(f"invalid date: {as_of_date}") from exc
+    store = UniverseMembershipStore(default_universe_memberships_path(processed_dir))
+    symbols = store.members_on(universe_name, query_date)
+    if not symbols:
+        click.echo(f"No members found for universe '{universe_name}' on {as_of_date}.")
+        return
+    click.echo(f"Universe: {universe_name}  as-of: {as_of_date}  members: {len(symbols)}")
+    for symbol in symbols:
+        click.echo(f"  {symbol}")
+
+
+@data_universe.command("show")
+@click.option("--universe", "universe_name", default=None, help="Filter to one universe.")
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+def universe_show(universe_name: str | None, processed_dir: Path) -> None:
+    """Show raw universe membership rows."""
+    store = UniverseMembershipStore(default_universe_memberships_path(processed_dir))
+    frame = store.read(universe=universe_name)
+    if frame.empty:
+        click.echo("No universe memberships found.")
+        return
+    click.echo(frame.to_string(index=False))
 
 
 @data.command("validate")

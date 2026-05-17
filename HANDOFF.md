@@ -318,39 +318,36 @@ Implemented in `src/tradescope/data/maintenance.py` and `src/tradescope/data/sec
 
 Sentinel: `_VALID_COVERAGES = {"ok", "partial_ipo", "partial_delisted"}`.
 
-### 3. Historical Universe Snapshots
+### 3. Historical Universe Snapshots — DONE (us_listed)
 
-The current security master tells us active/delisted securities, but not complete membership of each tradable universe at each historical date.
+Implemented in `src/tradescope/data/universe_memberships.py`.
 
-Needed:
-
-- A historical universe source/table.
-- Ability to ask: “what securities were eligible on date X?”
-- For backtests, build dynamic universes per rebalance date instead of static current constituents.
-
-Possible table:
+`UniverseMembershipStore` manages `data/universe_memberships.parquet` with schema:
 
 ```text
-data/universe_memberships.parquet
+universe | symbol | start_date | end_date | source | source_as_of_date | notes
 ```
 
-Candidate columns:
+Key method: `members_on(universe, as_of_date) -> list[str]` — returns symbols whose
+`start_date <= as_of_date` AND (`end_date is None` OR `end_date >= as_of_date`).
 
-```text
-universe
-symbol
-start_date
-end_date
-source
-source_as_of_date
-notes
+`build_us_listed_from_security_master(master, as_of_date)` derives the `us_listed` universe
+from the security master's `ipo_date` / `delisting_date` fields.
+
+CLI:
+
+```bash
+.venv/bin/tradescope data universe                                    # summary by universe
+.venv/bin/tradescope data universe build [--as-of 2026-01-01]        # build us_listed
+.venv/bin/tradescope data universe members --universe us_listed --as-of 2018-03-15
+.venv/bin/tradescope data universe show [--universe us_listed]
 ```
 
-First useful universes:
+Remaining universe work (not yet done):
 
-- all listed U.S. stocks from security master by listing/delisting date
-- S&P 500 historical constituents, once a reliable source is chosen
-- NASDAQ/NYSE current/exchange subsets, with clear warnings that current lists are survivorship biased
+- S&P 500 historical constituents — needs a reliable external source (still TBD).
+- Exchange subsets — can be derived from security master but current-only lists are survivorship biased; add with a clear warning when that's needed.
+- Wire `members_on` into `BacktestRunner` so strategies can build dynamic universes per rebalance date.
 
 ### 4. Batch Collection Ergonomics
 
@@ -418,7 +415,7 @@ The current data-pipeline priority is survivorship-bias mitigation.
 
 3. ~~Implement manual/importable symbol mappings.~~ (done)
 4. ~~Add audit logic for IPO/delisting-valid partial histories.~~ (done)
-5. Add historical universe snapshots.
+5. ~~Add historical universe snapshots (us_listed).~~ (done)
 6. Run full suite and ruff.
 7. Update `README.md`, `DEVELOPMENT_GUIDE.md`, `AGENTS.md`, and this handoff when behavior changes.
 8. Commit with a small, descriptive message.
