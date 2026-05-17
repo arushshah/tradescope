@@ -36,6 +36,7 @@ from tradescope.data.universe_memberships import (
     build_us_listed_from_security_master,
     default_universe_memberships_path,
 )
+from tradescope.data.sp500 import fetch_sp500_changes, build_sp500_memberships
 from tradescope.data.store import MarketDataStore
 from tradescope.results.compare import (
     best_run_from_sweep,
@@ -700,6 +701,49 @@ def universe_members(universe_name: str, as_of_date: str, processed_dir: Path) -
     click.echo(f"Universe: {universe_name}  as-of: {as_of_date}  members: {len(symbols)}")
     for symbol in symbols:
         click.echo(f"  {symbol}")
+
+
+@data_universe.command("ingest-sp500")
+@click.option(
+    "--cache-path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Local path to cache the downloaded CSV (avoids re-downloading).",
+)
+@click.option(
+    "--as-of",
+    "as_of_date",
+    default=None,
+    help="Source as-of date (YYYY-MM-DD). Defaults to today.",
+)
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+def universe_ingest_sp500(cache_path: Path | None, as_of_date: str | None, processed_dir: Path) -> None:
+    """Ingest S&P 500 historical constituents from fja05680/sp500 on GitHub.
+
+    Downloads a changes CSV (~1996-present) and converts it to universe
+    membership records stored in universe_memberships.parquet.
+
+    Use --cache-path to save the CSV locally and avoid re-downloading.
+    """
+    from datetime import date as _date
+
+    effective_as_of = as_of_date or _date.today().isoformat()
+    click.echo("Downloading S&P 500 changes CSV...")
+    try:
+        changes = fetch_sp500_changes(cache_path=cache_path)
+    except Exception as exc:
+        raise click.ClickException(f"failed to fetch S&P 500 changes: {exc}") from exc
+    click.echo(f"Loaded {len(changes)} change row(s)")
+    memberships = build_sp500_memberships(changes, source_as_of_date=effective_as_of)
+    store = UniverseMembershipStore(default_universe_memberships_path(processed_dir))
+    count = store.upsert(memberships)
+    click.echo(f"Upserted {count} membership record(s) into universe 'sp500'")
+    click.echo(f"Path: {store.path}")
 
 
 @data_universe.command("show")

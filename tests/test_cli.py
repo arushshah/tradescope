@@ -430,3 +430,34 @@ def test_data_universe_members_excludes_post_delisting(tmp_path):
     assert result.exit_code == 0, result.output
     assert "ENRN" not in result.output
     assert "No members found" in result.output
+
+
+def test_data_universe_ingest_sp500_upserts_memberships(tmp_path, monkeypatch):
+    import pandas as pd
+
+    mock_changes = pd.DataFrame(
+        {"tickers": ["AAPL,MSFT,GE", "AAPL,MSFT"]},
+        index=pd.to_datetime(["1996-01-02", "2018-06-19"]),
+    )
+    mock_changes.index.name = "date"
+
+    monkeypatch.setattr("tradescope.cli.fetch_sp500_changes", lambda cache_path=None: mock_changes)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data", "universe", "ingest-sp500",
+            "--as-of", "2026-01-01",
+            "--processed-dir", str(tmp_path / "processed"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "membership record(s)" in result.output
+
+    from tradescope.data.universe_memberships import UniverseMembershipStore, default_universe_memberships_path
+    store = UniverseMembershipStore(default_universe_memberships_path(tmp_path / "processed"))
+    from datetime import date
+    assert "AAPL" in store.members_on("sp500", date(2020, 1, 1))
+    assert "GE" not in store.members_on("sp500", date(2020, 1, 1))
+    assert "GE" in store.members_on("sp500", date(2000, 1, 1))
