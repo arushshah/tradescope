@@ -1,0 +1,45 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments and local tooling
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# Local market data and research artifacts
+/data/raw/
+/data/processed/
+/data/components/
+/results/
+
+# Generated reports and large local reference files
+*.html
+*.pdf
+
+# Notebook/editor/system noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
