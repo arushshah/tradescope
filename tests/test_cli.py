@@ -203,6 +203,74 @@ def test_data_securities_mappings_shows_provider_symbol_map(tmp_path):
     assert "yfinance" in result.output
 
 
+def test_data_securities_mappings_add_upserts_mapping(tmp_path):
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data", "securities", "mappings", "add",
+            "--source-symbol", "BRK.B",
+            "--provider", "yfinance",
+            "--provider-symbol", "BRK-B",
+            "--reason", "manual verified",
+            "--processed-dir", str(tmp_path / "processed"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "BRK.B" in result.output
+    assert "BRK-B" in result.output
+
+    from tradescope.data.store import MarketDataStore
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    frame = store.symbol_map.read()
+    assert len(frame) == 1
+    row = frame.iloc[0]
+    assert row["source_symbol"] == "BRK.B"
+    assert row["provider_symbol"] == "BRK-B"
+    assert row["status"] == "active"
+    assert row["reason"] == "manual verified"
+
+
+def test_data_securities_mappings_import_loads_csv(tmp_path):
+    csv_path = tmp_path / "mappings.csv"
+    csv_path.write_text("source_symbol,provider,provider_symbol,reason\nBRK.B,yfinance,BRK-B,manual\nAAPL,yfinance,AAPL,\n")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data", "securities", "mappings", "import",
+            "--path", str(csv_path),
+            "--processed-dir", str(tmp_path / "processed"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "2 mapping(s)" in result.output
+
+    from tradescope.data.store import MarketDataStore
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    frame = store.symbol_map.read()
+    assert len(frame) == 2
+    assert set(frame["source_symbol"]) == {"BRK.B", "AAPL"}
+
+
+def test_data_securities_mappings_import_rejects_bad_csv(tmp_path):
+    csv_path = tmp_path / "bad.csv"
+    csv_path.write_text("source_symbol,provider\nBRK.B,yfinance\n")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data", "securities", "mappings", "import",
+            "--path", str(csv_path),
+            "--processed-dir", str(tmp_path / "processed"),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "provider_symbol" in result.output
+
+
 def test_data_collect_securities_fetches_from_security_master(tmp_path, monkeypatch):
     store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
     store.security_master.upsert_listing_status(

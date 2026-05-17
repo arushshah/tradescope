@@ -30,11 +30,12 @@ class SymbolMap:
             return str(record["provider_symbol"])
         return None
 
-    def upsert_active(
+    def upsert(
         self,
         source_symbol: str,
         provider: str,
         provider_symbol: str,
+        status: str = "active",
         reason: str | None = None,
         source: str = "security_master",
     ) -> None:
@@ -47,12 +48,44 @@ class SymbolMap:
             "source_symbol": source_symbol.upper(),
             "provider": provider,
             "provider_symbol": provider_symbol.upper(),
-            "status": "active",
+            "status": status,
             "reason": reason,
             "first_seen": existing.get("first_seen", now),
             "last_seen": now,
         }
         self._write_records(records)
+
+    def upsert_active(
+        self,
+        source_symbol: str,
+        provider: str,
+        provider_symbol: str,
+        reason: str | None = None,
+        source: str = "security_master",
+    ) -> None:
+        self.upsert(source_symbol, provider, provider_symbol, status="active", reason=reason, source=source)
+
+    def import_csv(self, path: Path) -> int:
+        frame = pd.read_csv(path)
+        required = {"source_symbol", "provider", "provider_symbol"}
+        missing = required - set(frame.columns)
+        if missing:
+            raise ValueError(f"CSV missing required columns: {', '.join(sorted(missing))}")
+        count = 0
+        for _, row in frame.iterrows():
+            source = str(row["source"]) if "source" in frame.columns and pd.notna(row["source"]) else "security_master"
+            status = str(row["status"]) if "status" in frame.columns and pd.notna(row["status"]) else "active"
+            reason = str(row["reason"]) if "reason" in frame.columns and pd.notna(row["reason"]) else None
+            self.upsert(
+                source_symbol=str(row["source_symbol"]),
+                provider=str(row["provider"]),
+                provider_symbol=str(row["provider_symbol"]),
+                status=status,
+                reason=reason,
+                source=source,
+            )
+            count += 1
+        return count
 
     def read(self) -> pd.DataFrame:
         records = self._read_records()
@@ -68,7 +101,12 @@ class SymbolMap:
         ]
         if not records:
             return pd.DataFrame(columns=columns)
-        return pd.DataFrame(records.values()).sort_values(["provider", "source_symbol"]).reset_index(drop=True)
+        return (
+            pd.DataFrame(records.values())
+            .reindex(columns=columns)
+            .sort_values(["provider", "source_symbol"])
+            .reset_index(drop=True)
+        )
 
     def _read_records(self) -> dict[str, dict]:
         if not self.path.exists():

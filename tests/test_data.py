@@ -16,7 +16,7 @@ from tradescope.data.maintenance import (
 )
 from tradescope.config import load_config
 from tradescope.data.store import MarketDataStore
-from tradescope.data.symbol_mapping import yfinance_symbol_candidates
+from tradescope.data.symbol_mapping import SymbolMap, yfinance_symbol_candidates
 from tradescope.data.yfinance_provider import (
     expand_yfinance_components,
     normalize_component_frame,
@@ -347,6 +347,84 @@ def test_yfinance_symbol_candidates_include_common_provider_variants() -> None:
     assert yfinance_symbol_candidates("BRK.B") == ["BRK.B", "BRK-B"]
     assert yfinance_symbol_candidates("AAC-W") == ["AAC-W", "AAC-WT"]
     assert yfinance_symbol_candidates("AAC-U") == ["AAC-U", "AAC-UN"]
+
+
+def test_symbol_map_upsert_stores_custom_status(tmp_path) -> None:
+    symbol_map = SymbolMap(tmp_path / "mappings.parquet")
+    symbol_map.upsert("TICKER", "yfinance", "TICKER-A", status="inactive", reason="delisted")
+
+    frame = symbol_map.read()
+    assert len(frame) == 1
+    row = frame.iloc[0]
+    assert row["source_symbol"] == "TICKER"
+    assert row["provider_symbol"] == "TICKER-A"
+    assert row["status"] == "inactive"
+    assert row["reason"] == "delisted"
+
+
+def test_symbol_map_upsert_active_preserves_backward_compat(tmp_path) -> None:
+    symbol_map = SymbolMap(tmp_path / "mappings.parquet")
+    symbol_map.upsert_active("BRK.B", "yfinance", "BRK-B", reason="dot fix")
+
+    frame = symbol_map.read()
+    assert len(frame) == 1
+    row = frame.iloc[0]
+    assert row["status"] == "active"
+    assert row["reason"] == "dot fix"
+
+
+def test_symbol_map_import_csv_adds_mappings(tmp_path) -> None:
+    csv_path = tmp_path / "mappings.csv"
+    csv_path.write_text("source_symbol,provider,provider_symbol,status,reason\nBRK.B,yfinance,BRK-B,active,manual\n")
+    symbol_map = SymbolMap(tmp_path / "mappings.parquet")
+
+    count = symbol_map.import_csv(csv_path)
+
+    assert count == 1
+    frame = symbol_map.read()
+    assert len(frame) == 1
+    row = frame.iloc[0]
+    assert row["source_symbol"] == "BRK.B"
+    assert row["provider_symbol"] == "BRK-B"
+    assert row["status"] == "active"
+    assert row["reason"] == "manual"
+
+
+def test_symbol_map_import_csv_defaults_optional_columns(tmp_path) -> None:
+    csv_path = tmp_path / "mappings.csv"
+    csv_path.write_text("source_symbol,provider,provider_symbol\nAAC-W,yfinance,AAC-WT\n")
+    symbol_map = SymbolMap(tmp_path / "mappings.parquet")
+
+    count = symbol_map.import_csv(csv_path)
+
+    assert count == 1
+    row = symbol_map.read().iloc[0]
+    assert row["status"] == "active"
+    assert row["source"] == "security_master"
+    assert pd.isna(row["reason"])
+
+
+def test_symbol_map_import_csv_raises_on_missing_columns(tmp_path) -> None:
+    csv_path = tmp_path / "bad.csv"
+    csv_path.write_text("source_symbol,provider\nBRK.B,yfinance\n")
+    symbol_map = SymbolMap(tmp_path / "mappings.parquet")
+
+    import pytest
+    with pytest.raises(ValueError, match="provider_symbol"):
+        symbol_map.import_csv(csv_path)
+
+
+def test_symbol_map_import_csv_merges_with_existing(tmp_path) -> None:
+    symbol_map = SymbolMap(tmp_path / "mappings.parquet")
+    symbol_map.upsert_active("AAPL", "yfinance", "AAPL")
+    csv_path = tmp_path / "mappings.csv"
+    csv_path.write_text("source_symbol,provider,provider_symbol\nBRK.B,yfinance,BRK-B\n")
+
+    symbol_map.import_csv(csv_path)
+
+    frame = symbol_map.read()
+    assert len(frame) == 2
+    assert set(frame["source_symbol"]) == {"AAPL", "BRK.B"}
 
 
 def test_update_symbols_dataset_fetches_arbitrary_security_master_symbols(tmp_path, monkeypatch) -> None:

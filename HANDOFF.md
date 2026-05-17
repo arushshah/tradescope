@@ -274,18 +274,19 @@ Tests to check for data pipeline work:
 
 These are the next pieces needed to move toward true survivorship-bias mitigation.
 
-### 1. Manual/Importable Symbol Mappings
+### 1. Manual/Importable Symbol Mappings — DONE
 
-Current mapping support only tries simple deterministic yfinance variants and records successes.
+Implemented in `src/tradescope/data/symbol_mapping.py` and `src/tradescope/cli.py`.
 
-Needed:
+`SymbolMap` now has:
 
-- Add a CLI command to import mappings from CSV/Parquet.
-- Add a command to manually upsert one mapping.
-- Add status/reason fields for rejected or failed candidates.
-- Keep canonical research symbols separate from provider fetch symbols.
+- `upsert(source_symbol, provider, provider_symbol, status, reason, source)` — generalized upsert with arbitrary status.
+- `upsert_active(...)` — backwards-compat wrapper that calls `upsert` with `status="active"`.
+- `import_csv(path)` — reads a CSV and upserts each row. Returns count imported.
 
-Suggested CLI:
+`read()` now always returns all expected columns (including `reason`) even when all values are null.
+
+CLI:
 
 ```bash
 .venv/bin/tradescope data securities mappings
@@ -293,11 +294,7 @@ Suggested CLI:
 .venv/bin/tradescope data securities mappings import --path mappings.csv
 ```
 
-CSV columns could be:
-
-```text
-source,source_symbol,provider,provider_symbol,status,reason
-```
+CSV columns: `source_symbol`, `provider`, `provider_symbol` (required); `source`, `status`, `reason` (optional, defaults: `security_master`, `active`, null).
 
 ### 2. Audit Should Understand IPOs And Delistings
 
@@ -421,9 +418,9 @@ The current data-pipeline priority is survivorship-bias mitigation.
    .venv/bin/python -m pytest tests/test_data.py tests/test_cli.py tests/test_runner.py tests/test_audit.py
    ```
 
-3. Implement manual/importable symbol mappings.
+3. ~~Implement manual/importable symbol mappings.~~ (done)
 4. Add audit logic for IPO/delisting-valid partial histories.
-5. Add tests for both.
+5. Add tests.
 6. Run full suite and ruff.
 7. Update `README.md`, `DEVELOPMENT_GUIDE.md`, `AGENTS.md`, and this handoff when behavior changes.
 8. Commit with a small, descriptive message.

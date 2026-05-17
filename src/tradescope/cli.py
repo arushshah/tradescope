@@ -503,20 +503,76 @@ def ingest_alpha_vantage_securities(
     click.echo(f"Total listing(s): {total}")
 
 
-@securities.command("mappings")
+@securities.group("mappings", invoke_without_command=True)
 @click.option(
     "--processed-dir",
     type=click.Path(file_okay=False, path_type=Path),
     default=Path("data/processed"),
     show_default=True,
 )
-def security_symbol_mappings(processed_dir: Path) -> None:
-    """Inspect provider symbol mappings."""
+@click.pass_context
+def security_symbol_mappings(ctx: click.Context, processed_dir: Path) -> None:
+    """Inspect and manage provider symbol mappings."""
+    if ctx.invoked_subcommand is not None:
+        return
     frame = SymbolMap(default_symbol_map_path(processed_dir)).read()
     if frame.empty:
         click.echo("No symbol mappings found.")
         return
     click.echo(frame.to_string(index=False))
+
+
+@security_symbol_mappings.command("add")
+@click.option("--source-symbol", required=True, help="Canonical research symbol (e.g. BRK.B).")
+@click.option("--provider", required=True, help="Provider name (e.g. yfinance).")
+@click.option("--provider-symbol", required=True, help="Provider-specific symbol (e.g. BRK-B).")
+@click.option("--reason", help="Free-text note about this mapping.")
+@click.option("--source", default="security_master", show_default=True)
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+def mappings_add(
+    source_symbol: str,
+    provider: str,
+    provider_symbol: str,
+    reason: str | None,
+    source: str,
+    processed_dir: Path,
+) -> None:
+    """Add or update one provider symbol mapping."""
+    SymbolMap(default_symbol_map_path(processed_dir)).upsert(
+        source_symbol=source_symbol,
+        provider=provider,
+        provider_symbol=provider_symbol,
+        status="active",
+        reason=reason,
+        source=source,
+    )
+    click.echo(f"Mapping upserted: {source_symbol.upper()} -> {provider}:{provider_symbol.upper()}")
+
+
+@security_symbol_mappings.command("import")
+@click.option("--path", "csv_path", required=True, type=click.Path(exists=True, path_type=Path), help="CSV file to import.")
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+def mappings_import(csv_path: Path, processed_dir: Path) -> None:
+    """Import provider symbol mappings from a CSV file.
+
+    Required CSV columns: source_symbol, provider, provider_symbol.
+    Optional columns: source (default security_master), status (default active), reason.
+    """
+    try:
+        count = SymbolMap(default_symbol_map_path(processed_dir)).import_csv(csv_path)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Imported {count} mapping(s) from {csv_path}")
 
 
 @data.command("clear")
