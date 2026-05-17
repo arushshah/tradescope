@@ -1,0 +1,27 @@
+name: ma_cross_spy
+symbols:
+  - SPY
+start: "2015-01-01"
+end: "2025-01-01"
+interval: "1d"
+data:
+  provider: yfinance
+  raw_dir: data/raw
+  processed_dir: data/processed
+  refresh: false
+strategy:
+  name: ma_cross
+  params:
+    fast_window: 20
+    slow_window: 100
+portfolio:
+  init_cash: 100000
+  fees: 0.0
+  slippage: 0.0005
+  direction: longonly
+  benchmark: SPY
+  cash_sharing: true
+  sizing:
+    method: equal_weight
+results:
+  output_dir: results

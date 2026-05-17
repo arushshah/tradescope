@@ -1,0 +1,48 @@
+name: rebalance_momentum_sp500_top50_6m
+universe:
+  presets:
+    - sp500
+  symbols:
+    - SPY
+start: "2020-01-01"
+end: "2025-01-01"
+interval: "1d"
+data:
+  provider: yfinance
+  raw_dir: data/raw
+  processed_dir: data/processed
+  refresh: false
+strategy:
+  name: rebalance_momentum
+  params:
+    momentum_window: 126
+    top_n: 50
+    rebalance: monthly
+    regime_symbol: SPY
+    regime_window: 200
+    use_regime_filter: true
+    trend_window: 100
+    use_trend_filter: true
+    trade_regime_symbol: false
+    exit_on_regime_fail: true
+portfolio:
+  init_cash: 100000
+  fees: 0.0
+  slippage: 0.0005
+  direction: longonly
+  benchmark: SPY
+  cash_sharing: true
+  sizing:
+    method: equal_weight
+  execution:
+    price: next_open
+  risk:
+    stop_loss:
+    take_profit:
+    trailing_stop: false
+results:
+  output_dir: results
+  save_trades: true
+  save_equity_curve: true
+  save_plots: true
+  save_report: false
