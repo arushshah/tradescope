@@ -13,6 +13,7 @@ from tradescope.config import BacktestConfig, DataConfig, PortfolioConfig, Resul
 from tradescope.data.quality import DataQualityReport, build_quality_report
 from tradescope.data.store import MarketDataStore
 from tradescope.data.store import combine_frames, entry_end_date, entry_start_date
+from tradescope.data.symbol_mapping import yfinance_symbol_candidates
 from tradescope.data.yfinance_provider import YFinanceProvider, expand_yfinance_components
 from tradescope.exceptions import DataError, NoDataError
 
@@ -253,13 +254,16 @@ def fetch_configured_components(config: BacktestConfig) -> int:
     store = MarketDataStore(config.data.raw_dir, config.data.processed_dir, config.data.component_dir)
     written = 0
     for symbol in config.symbols:
+        provider_symbol = store.symbol_map.resolve(provider.name, symbol) or symbol
         for component in components:
             if not config.data.refresh and store.has_component(provider.name, symbol, component):
                 continue
             try:
-                data = provider.fetch_component(symbol, component)
+                data = provider.fetch_component(provider_symbol, component)
             except NoDataError:
                 continue
+            if "symbol" in data.columns:
+                data["symbol"] = symbol.upper()
             store.write_component(provider.name, symbol, component, data)
             written += 1
     return written
@@ -401,10 +405,17 @@ def fetch_and_write_group(
     end: date,
 ) -> pd.DataFrame:
     provider = provider_for(provider_name)
-    raw = provider.fetch_raw([symbol], start, end, interval)[symbol]
-    store.write_raw(provider.name, symbol, start, end, interval, raw)
+    raw, provider_symbol = fetch_raw_with_symbol_resolution(store, provider, symbol, start, end, interval)
+    store.write_raw(provider.name, provider_symbol, start, end, interval, raw)
     processed = validate_provider_frame(provider, symbol, raw)
     store.write_processed(provider.name, symbol, start, end, interval, processed)
+    if provider_symbol != symbol.upper():
+        store.symbol_map.upsert_active(
+            symbol,
+            provider.name,
+            provider_symbol,
+            reason="resolved during OHLCV fetch",
+        )
     return processed
 
 
@@ -412,3 +423,22 @@ def validate_provider_frame(provider: YFinanceProvider, symbol: str, raw: pd.Dat
     from tradescope.data.validation import validate_ohlcv
 
     return validate_ohlcv(symbol, provider.normalize(symbol, raw))
+
+
+def fetch_raw_with_symbol_resolution(
+    store: MarketDataStore,
+    provider: YFinanceProvider,
+    symbol: str,
+    start: date,
+    end: date | None,
+    interval: str,
+) -> tuple[pd.DataFrame, str]:
+    mapped_symbol = store.symbol_map.resolve(provider.name, symbol)
+    last_error: NoDataError | None = None
+    for provider_symbol in yfinance_symbol_candidates(symbol, mapped_symbol):
+        try:
+            raw = provider.fetch_raw([provider_symbol], start, end, interval)[provider_symbol]
+            return raw, provider_symbol
+        except NoDataError as exc:
+            last_error = exc
+    raise last_error or NoDataError(f"{symbol}: yfinance returned no rows")

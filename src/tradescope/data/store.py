@@ -9,6 +9,7 @@ from typing import Literal
 import pandas as pd
 
 from tradescope.data.security_master import SecurityMaster, default_security_master_path
+from tradescope.data.symbol_mapping import SymbolMap, default_symbol_map_path
 
 DataLayer = Literal["raw", "processed"]
 
@@ -46,6 +47,7 @@ class MarketDataStore:
         self.processed_dir.mkdir(parents=True, exist_ok=True)
         self.component_dir.mkdir(parents=True, exist_ok=True)
         self.security_master = SecurityMaster(default_security_master_path(self.processed_dir))
+        self.symbol_map = SymbolMap(default_symbol_map_path(self.processed_dir))
 
     def read_processed(
         self,

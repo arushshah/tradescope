@@ -188,6 +188,21 @@ def test_data_securities_ingests_alpha_vantage_listing_status(tmp_path, monkeypa
     assert "DELISTED1" in show_result.output
 
 
+def test_data_securities_mappings_shows_provider_symbol_map(tmp_path):
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    store.symbol_map.upsert_active("BRK.B", "yfinance", "BRK-B", reason="test")
+
+    result = CliRunner().invoke(
+        cli,
+        ["data", "securities", "mappings", "--processed-dir", str(tmp_path / "processed")],
+    )
+
+    assert result.exit_code == 0
+    assert "BRK.B" in result.output
+    assert "BRK-B" in result.output
+    assert "yfinance" in result.output
+
+
 def test_data_collect_securities_fetches_from_security_master(tmp_path, monkeypatch):
     store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
     store.security_master.upsert_listing_status(

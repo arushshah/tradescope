@@ -30,6 +30,7 @@ from tradescope.data.maintenance import (
 )
 from tradescope.data.quality import build_quality_report, reports_to_frame
 from tradescope.data.security_master import SecurityMaster, default_security_master_path
+from tradescope.data.symbol_mapping import SymbolMap, default_symbol_map_path
 from tradescope.data.store import MarketDataStore
 from tradescope.results.compare import (
     best_run_from_sweep,
@@ -500,6 +501,22 @@ def ingest_alpha_vantage_securities(
         click.echo(f"Ingested {count} {current_state} listing(s)")
     click.echo(f"Security master: {master.path}")
     click.echo(f"Total listing(s): {total}")
+
+
+@securities.command("mappings")
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+def security_symbol_mappings(processed_dir: Path) -> None:
+    """Inspect provider symbol mappings."""
+    frame = SymbolMap(default_symbol_map_path(processed_dir)).read()
+    if frame.empty:
+        click.echo("No symbol mappings found.")
+        return
+    click.echo(frame.to_string(index=False))
 
 
 @data.command("clear")

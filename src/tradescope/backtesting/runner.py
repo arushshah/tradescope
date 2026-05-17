@@ -14,6 +14,7 @@ from tradescope.data.store import (
     entry_start_date,
     trim_frame,
 )
+from tradescope.data.symbol_mapping import yfinance_symbol_candidates
 from tradescope.data.yfinance_provider import YFinanceProvider
 from tradescope.data.validation import validate_ohlcv
 from tradescope.exceptions import DataError, NoDataError, StrategyError, TradeScopeError
@@ -185,10 +186,27 @@ class BacktestRunner:
         start: date,
         end: date | None,
     ) -> pd.DataFrame:
-        raw = provider.fetch_raw([symbol], start, end, self.config.interval)[symbol]
-        store.write_raw(provider.name, symbol, start, end, self.config.interval, raw)
+        last_error: NoDataError | None = None
+        mapped_symbol = store.symbol_map.resolve(provider.name, symbol)
+        for provider_symbol in yfinance_symbol_candidates(symbol, mapped_symbol):
+            try:
+                raw = provider.fetch_raw([provider_symbol], start, end, self.config.interval)[provider_symbol]
+                break
+            except NoDataError as exc:
+                last_error = exc
+        else:
+            raise last_error or NoDataError(f"{symbol}: yfinance returned no rows")
+
+        store.write_raw(provider.name, provider_symbol, start, end, self.config.interval, raw)
         processed = validate_ohlcv(symbol, provider.normalize(symbol, raw))
         store.write_processed(provider.name, symbol, start, end, self.config.interval, processed)
+        if provider_symbol != symbol.upper():
+            store.symbol_map.upsert_active(
+                symbol,
+                provider.name,
+                provider_symbol,
+                reason="resolved during OHLCV fetch",
+            )
         return processed
 
     def _build_portfolio(self, data: dict[str, pd.DataFrame], close: pd.DataFrame, signals: dict):

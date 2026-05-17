@@ -138,6 +138,35 @@ def test_runner_fetches_canonical_coverage_and_returns_requested_slice(tmp_path,
     assert data["AAA"].index.max() == pd.Timestamp("2024-02-29")
 
 
+def test_runner_resolves_yfinance_provider_symbol_variants(tmp_path, monkeypatch) -> None:
+    config = load_config("configs/examples/ma_cross.yaml")
+    config.symbols = ["BRK.B"]
+    config.start = pd.Timestamp("2024-01-01").date()
+    config.end = pd.Timestamp("2024-01-03").date()
+    config.data.use_canonical_coverage = False
+    config.data.raw_dir = tmp_path / "raw"
+    config.data.processed_dir = tmp_path / "processed"
+    calls = []
+
+    def fake_fetch(self, symbols, start, end, interval):
+        calls.append(symbols[0])
+        if symbols == ["BRK.B"]:
+            raise NoDataError("BRK.B: no data")
+        assert symbols == ["BRK-B"]
+        return {"BRK-B": raw_frame("BRK-B", start, end)}
+
+    monkeypatch.setattr(YFinanceProvider, "fetch_raw", fake_fetch)
+
+    data = BacktestRunner(config)._load_data()
+    store = MarketDataStore(config.data.raw_dir, config.data.processed_dir)
+
+    assert calls == ["BRK.B", "BRK-B"]
+    assert data["BRK.B"]["symbol"].unique().tolist() == ["BRK.B"]
+    assert store.read_processed("yfinance", "BRK.B", config.start, config.end, "1d") is not None
+    assert store.read_processed("yfinance", "BRK-B", config.start, config.end, "1d") is None
+    assert store.symbol_map.resolve("yfinance", "BRK.B") == "BRK-B"
+
+
 def test_runner_fetches_only_missing_processed_tail(tmp_path, monkeypatch) -> None:
     config = load_config("configs/examples/ma_cross.yaml")
     config.symbols = ["AAA"]

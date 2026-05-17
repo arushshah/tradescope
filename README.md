@@ -342,6 +342,8 @@ Collect market data for symbols selected from the security master:
 .venv/bin/tradescope data collect-securities --exchange NASDAQ --asset-type Stock
 ```
 
+When yfinance uses a different provider symbol than the security master, TradeScope tries common provider variants such as `BRK.B` -> `BRK-B`, records successful mappings in `data/symbol_mappings.parquet`, and still stores processed OHLCV under the original research symbol.
+
 Audit canonical data coverage and repair symbols with missing coverage or quality warnings:
 
 ```bash
@@ -372,6 +374,7 @@ Inspect the local security master:
 .venv/bin/tradescope data securities --status unavailable
 .venv/bin/tradescope data securities ingest-alpha-vantage --api-key "$ALPHAVANTAGE_API_KEY"
 .venv/bin/tradescope data securities ingest-alpha-vantage --api-key "$ALPHAVANTAGE_API_KEY" --state delisted --date 2020-01-01
+.venv/bin/tradescope data securities mappings
 ```
 
 Clear local data:

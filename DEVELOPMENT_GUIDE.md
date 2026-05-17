@@ -1358,6 +1358,8 @@ Update data:
 .venv/bin/tradescope data collect-securities --status delisted --offset 0 --limit 100
 ```
 
+Provider symbol mappings are stored in `data/symbol_mappings.parquet`. This lets the security master keep the research symbol while yfinance fetches with its own provider symbol when they differ.
+
 Audit data:
 
 ```bash

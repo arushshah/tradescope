@@ -16,6 +16,7 @@ from tradescope.data.maintenance import (
 )
 from tradescope.config import load_config
 from tradescope.data.store import MarketDataStore
+from tradescope.data.symbol_mapping import yfinance_symbol_candidates
 from tradescope.data.yfinance_provider import (
     expand_yfinance_components,
     normalize_component_frame,
@@ -340,6 +341,12 @@ def test_parse_alpha_vantage_listing_status_csv() -> None:
     assert records[0].status == "Active"
     assert records[0].delisting_date is None
     assert records[1].delisting_date == "2020-01-01"
+
+
+def test_yfinance_symbol_candidates_include_common_provider_variants() -> None:
+    assert yfinance_symbol_candidates("BRK.B") == ["BRK.B", "BRK-B"]
+    assert yfinance_symbol_candidates("AAC-W") == ["AAC-W", "AAC-WT"]
+    assert yfinance_symbol_candidates("AAC-U") == ["AAC-U", "AAC-UN"]
 
 
 def test_update_symbols_dataset_fetches_arbitrary_security_master_symbols(tmp_path, monkeypatch) -> None:
