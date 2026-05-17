@@ -37,19 +37,17 @@ Do not assume global `python`, `pytest`, `ruff`, or `tradescope` are active.
 Recent commits:
 
 ```text
-ee18072 Add provider symbol mapping support
-8bb5199 Preserve listing metadata during collection
-22a1ca3 Collect data from security master
-38e2633 Ignore generated security master data
-cd175b8 Add Alpha Vantage security master ingestion
-f10abc0 Add data collection manifests
-dd88f4e Add security master for bulk data collection
+28bcd36 Add S&P 500 historical constituent ingestion
+a70cba0 Add historical universe membership snapshots
+2832f48 Add IPO/delisting-aware audit coverage labels
+200045d Add manual/importable symbol mapping support
+0cffc54 Add project handoff guide
 ```
 
 At the time this handoff was written:
 
 - `git status --short` was clean before creating this document.
-- Full test suite passed after the latest functional changes: `79 passed`.
+- Full test suite passed: `119 passed`.
 - Ruff passed: `All checks passed!`.
 
 ## Important Local Data State
@@ -341,11 +339,24 @@ CLI:
 .venv/bin/tradescope data universe build [--as-of 2026-01-01]        # build us_listed
 .venv/bin/tradescope data universe members --universe us_listed --as-of 2018-03-15
 .venv/bin/tradescope data universe show [--universe us_listed]
+.venv/bin/tradescope data universe ingest-sp500 [--as-of 2026-01-01] [--cache-path data/sp500_changes.csv]
 ```
+
+S&P 500 source: `fja05680/sp500` on GitHub (changes CSV, ~1996-present). Each row is a
+full snapshot on a composition-change date. `end_date` is set to one day before the removal
+change row so `members_on()` is inclusive on any date the symbol was actually in the index.
+Multiple tenures per symbol (removed and re-added) are stored as separate records.
+
+Implementation files:
+
+```text
+src/tradescope/data/sp500.py
+```
+
+Key functions: `fetch_sp500_changes(cache_path)`, `build_sp500_memberships(changes_df, source_as_of_date)`.
 
 Remaining universe work (not yet done):
 
-- S&P 500 historical constituents — needs a reliable external source (still TBD).
 - Exchange subsets — can be derived from security master but current-only lists are survivorship biased; add with a clear warning when that's needed.
 - Wire `members_on` into `BacktestRunner` so strategies can build dynamic universes per rebalance date.
 
@@ -416,9 +427,10 @@ The current data-pipeline priority is survivorship-bias mitigation.
 3. ~~Implement manual/importable symbol mappings.~~ (done)
 4. ~~Add audit logic for IPO/delisting-valid partial histories.~~ (done)
 5. ~~Add historical universe snapshots (us_listed).~~ (done)
-6. Run full suite and ruff.
-7. Update `README.md`, `DEVELOPMENT_GUIDE.md`, `AGENTS.md`, and this handoff when behavior changes.
-8. Commit with a small, descriptive message.
+6. ~~Add S&P 500 historical constituent ingestion.~~ (done)
+7. Run full suite and ruff.
+8. Update `README.md`, `DEVELOPMENT_GUIDE.md`, `AGENTS.md`, and this handoff when behavior changes.
+9. Commit with a small, descriptive message.
 
 ## Git Workflow
 
