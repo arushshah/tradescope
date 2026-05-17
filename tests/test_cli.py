@@ -621,3 +621,72 @@ def test_data_manifests_show_prints_json(tmp_path):
     assert result.exit_code == 0, result.output
     assert "symbols_requested" in result.output
     assert "42" in result.output
+
+
+def test_collect_securities_universe_flag_uses_membership_store(tmp_path, monkeypatch):
+    from tradescope.data.universe_memberships import UniverseMembershipStore, default_universe_memberships_path, UniverseMembership
+
+    store_path = default_universe_memberships_path(tmp_path / "processed")
+    membership_store = UniverseMembershipStore(store_path)
+    membership_store.upsert([
+        UniverseMembership("sp500", "AAPL", "2010-01-01", None, "test", "2026-01-01"),
+        UniverseMembership("sp500", "MSFT", "2010-01-01", None, "test", "2026-01-01"),
+    ])
+
+    collected = []
+
+    def fake_update(symbols, **kwargs):
+        collected.extend(symbols)
+
+        class Config:
+            name = "security_master_collection"
+            symbols = collected[:]
+            start = kwargs["start"]
+            end = kwargs["end"]
+            interval = kwargs["interval"]
+
+            class Data:
+                provider = "yfinance"
+                raw_dir = tmp_path / "raw"
+                processed_dir = tmp_path / "processed"
+                component_dir = tmp_path / "components"
+                coverage_start = kwargs["start"]
+                coverage_end = kwargs["end"]
+                components = kwargs["components"]
+
+            data = Data()
+
+        return Config(), {"ohlcv_symbols": len(collected), "component_files": 0}
+
+    monkeypatch.setattr("tradescope.cli.update_symbols_dataset", fake_update)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data", "collect-securities",
+            "--processed-dir", str(tmp_path / "processed"),
+            "--raw-dir", str(tmp_path / "raw"),
+            "--component-dir", str(tmp_path / "components"),
+            "--universe", "sp500",
+            "--start", "2024-01-01",
+            "--end", "2024-01-03",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert sorted(collected) == ["AAPL", "MSFT"]
+    assert "sp500" in result.output
+
+
+def test_collect_securities_universe_flag_errors_when_store_missing(tmp_path):
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data", "collect-securities",
+            "--processed-dir", str(tmp_path / "processed"),
+            "--universe", "sp500",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "ingest-sp500" in result.output

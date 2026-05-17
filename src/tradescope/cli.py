@@ -304,6 +304,7 @@ def update_data(
 @click.option("--end", "end_date", default="2026-01-01", show_default=True)
 @click.option("--interval", default="1d", show_default=True)
 @click.option("--component", "components", multiple=True, default=["ohlcv", "research_bundle"], show_default=True)
+@click.option("--universe", "universe_name", default=None, help="Collect only symbols in this managed universe (e.g. sp500).")
 @click.option("--offset", type=click.IntRange(min=0), default=0, show_default=True)
 @click.option("--limit", type=click.IntRange(min=1), help="Collect only the first N matching symbols.")
 @click.option("--refresh", is_flag=True, help="Refetch existing data and components.")
@@ -320,6 +321,7 @@ def collect_securities(
     end_date: str,
     interval: str,
     components: tuple[str, ...],
+    universe_name: str | None,
     offset: int,
     limit: int | None,
     refresh: bool,
@@ -336,17 +338,34 @@ def collect_securities(
         offset = (last.get("offset") or 0) + (last.get("symbols_requested") or 0)
         click.echo(f"Resuming from offset {offset} (last run: {last.get('generated_at', '?')})")
 
-    master = SecurityMaster(default_security_master_path(processed_dir))
-    symbols = master.symbols(
-        statuses=list(status),
-        exchanges=list(exchange) or None,
-        asset_types=list(asset_type) or None,
-        source=source,
-        offset=offset,
-        limit=limit,
-    )
-    if not symbols:
-        raise click.ClickException("no matching securities found in security master")
+    if universe_name:
+        memberships_path = default_universe_memberships_path(processed_dir)
+        if not memberships_path.exists():
+            raise click.ClickException(
+                f"universe '{universe_name}' requires the membership store. "
+                f"Run 'tradescope data universe ingest-sp500' first."
+            )
+        membership_store = UniverseMembershipStore(memberships_path)
+        all_universe_symbols = membership_store.all_symbols(universe_name)
+        if not all_universe_symbols:
+            raise click.ClickException(
+                f"universe '{universe_name}' has no symbols. "
+                f"Run 'tradescope data universe ingest-sp500' first."
+            )
+        symbols = all_universe_symbols[offset : offset + limit if limit else None]
+        click.echo(f"Universe '{universe_name}': {len(all_universe_symbols)} symbols, collecting {len(symbols)}")
+    else:
+        master = SecurityMaster(default_security_master_path(processed_dir))
+        symbols = master.symbols(
+            statuses=list(status),
+            exchanges=list(exchange) or None,
+            asset_types=list(asset_type) or None,
+            source=source,
+            offset=offset,
+            limit=limit,
+        )
+        if not symbols:
+            raise click.ClickException("no matching securities found in security master")
 
     skipped_unavailable = 0
     if not refresh:
@@ -856,7 +875,7 @@ def data_status(processed_dir: str) -> None:
     if not has_membership_data:
         next_steps.append("No membership data found — run: tradescope data universe ingest-sp500")
     elif has_sp500_data and ohlcv_count == 0:
-        next_steps.append("S&P 500 membership data found but no OHLCV — run: tradescope data collect-securities")
+        next_steps.append("S&P 500 membership data found but no OHLCV — run: tradescope data collect-securities --universe sp500")
 
     if next_steps:
         click.echo("")
