@@ -16,6 +16,7 @@ dependencies = [
   "pyarrow>=15.0",
   "pyyaml>=6.0",
   "scikit-learn>=1.3",
+  "lxml>=5.0",
   "yfinance>=0.2.40",
   "vectorbt>=0.26.0",
 ]

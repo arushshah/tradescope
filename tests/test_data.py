@@ -785,6 +785,25 @@ def test_expand_yfinance_research_bundle_includes_advanced_components() -> None:
     assert "institutional_holders" not in components
     assert "news" not in components
     assert "option_chains" not in components
+    # deprecated in yfinance 1.3+
+    assert "earnings" not in components
+    assert "quarterly_earnings" not in components
+    assert "earnings_dates" in components
+    assert "earnings_history" in components
+
+
+def test_fetch_component_raises_no_data_error_on_none_payload(monkeypatch) -> None:
+    from tradescope.data.yfinance_provider import YFinanceProvider
+    from tradescope.exceptions import NoDataError
+    import unittest.mock as mock
+
+    provider = YFinanceProvider()
+
+    with mock.patch("tradescope.data.yfinance_provider.fetch_component_payload", return_value=None):
+        with mock.patch("yfinance.Ticker"):
+            import pytest
+            with pytest.raises(NoDataError, match="returned no data"):
+                provider.fetch_component("AAPL", "dividends")
 
 
 def test_normalize_component_frame_handles_list_payloads() -> None:
