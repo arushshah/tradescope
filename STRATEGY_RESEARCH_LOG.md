@@ -1,6 +1,6 @@
 # Strategy Research Log
 
-This is the running notebook for TradingV2 strategy research. We will keep it updated as we test ideas, reject weak assumptions, and find patterns worth exploring further.
+This is the running notebook for TradeScope strategy research. We will keep it updated as we test ideas, reject weak assumptions, and find patterns worth exploring further.
 
 The goal is not to collect pretty backtests. The goal is to build a repeatable research process that can survive friction: fees, slippage, realistic execution timing, stale symbols, bad data, regime changes, and parameter sensitivity.
 
@@ -12,7 +12,7 @@ The goal is not to collect pretty backtests. The goal is to build a repeatable r
 - Compare against `SPY` or an appropriate benchmark.
 - Track whether results survive reasonable parameter changes.
 - Treat `execution.price: close` as optimistic unless the signal is known before the close.
-- Do not trust a run until `tradingv2 results audit` passes.
+- Do not trust a run until `tradescope results audit` passes.
 - Record boring failures. They are useful.
 
 ## Strategy 001: Cross-Sectional Momentum With Market Regime
@@ -116,8 +116,8 @@ We should distrust this strategy if:
 ### First Commands
 
 ```bash
-.venv/bin/tradingv2 backtest run --config configs/examples/momentum_regime_smoke.yaml
-.venv/bin/tradingv2 results audit results/<run_id>
+.venv/bin/tradescope backtest run --config configs/examples/momentum_regime_smoke.yaml
+.venv/bin/tradescope results audit results/<run_id>
 ```
 
 ### Results
@@ -413,8 +413,8 @@ The current engine uses an `entries` / `exits` strategy contract. This version r
 ### First Commands
 
 ```bash
-.venv/bin/tradingv2 backtest run --config configs/examples/rebalance_momentum_sp500_top20_6m.yaml
-.venv/bin/tradingv2 results audit results/<run_id>
+.venv/bin/tradescope backtest run --config configs/examples/rebalance_momentum_sp500_top20_6m.yaml
+.venv/bin/tradescope results audit results/<run_id>
 ```
 
 ### Results

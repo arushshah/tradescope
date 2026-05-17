@@ -3,9 +3,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from tradingv2.config.models import BacktestConfig
-from tradingv2.config import load_config
-from tradingv2.universe import load_universe_presets
+from tradescope.config.models import BacktestConfig
+from tradescope.config import load_config
+from tradescope.universe import load_universe_presets
 
 
 def test_load_example_config() -> None:

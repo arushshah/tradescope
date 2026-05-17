@@ -2,9 +2,9 @@ from datetime import date
 
 import pandas as pd
 
-from tradingv2.data.quality import build_quality_report
-from tradingv2.data.store import MarketDataStore
-from tradingv2.data.yfinance_provider import normalize_yfinance_frame
+from tradescope.data.quality import build_quality_report
+from tradescope.data.store import MarketDataStore
+from tradescope.data.yfinance_provider import normalize_yfinance_frame
 
 
 def test_normalize_yfinance_frame() -> None:

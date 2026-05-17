@@ -2,15 +2,15 @@ from pathlib import Path
 
 import pandas as pd
 
-from tradingv2.strategies.builtin.buy_hold import generate_signals as buy_hold
-from tradingv2.strategies.builtin.bbands import generate_signals as bbands
-from tradingv2.strategies.builtin.donchian import generate_signals as donchian
-from tradingv2.strategies.builtin.ma_cross import generate_signals as ma_cross
-from tradingv2.strategies.builtin.macd import generate_signals as macd
-from tradingv2.strategies.builtin.momentum_regime import generate_signals as momentum_regime
-from tradingv2.strategies.builtin.rebalance_momentum import generate_signals as rebalance_momentum
-from tradingv2.strategies.loader import load_strategy
-from tradingv2.strategies.registry import describe_strategy, list_strategy_metadata
+from tradescope.strategies.builtin.buy_hold import generate_signals as buy_hold
+from tradescope.strategies.builtin.bbands import generate_signals as bbands
+from tradescope.strategies.builtin.donchian import generate_signals as donchian
+from tradescope.strategies.builtin.ma_cross import generate_signals as ma_cross
+from tradescope.strategies.builtin.macd import generate_signals as macd
+from tradescope.strategies.builtin.momentum_regime import generate_signals as momentum_regime
+from tradescope.strategies.builtin.rebalance_momentum import generate_signals as rebalance_momentum
+from tradescope.strategies.loader import load_strategy
+from tradescope.strategies.registry import describe_strategy, list_strategy_metadata
 
 
 def sample_data() -> dict[str, pd.DataFrame]:

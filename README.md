@@ -1,6 +1,6 @@
-# TradingV2
+# TradeScope
 
-TradingV2 is a CLI-first equity backtesting and research toolkit built around [`vectorbt`](https://vectorbt.dev/). It is designed for fast personal research today, while keeping the architecture clean enough to grow into dashboards, richer experiment tracking, and production-grade workflows later.
+TradeScope is a CLI-first equity backtesting and research toolkit built around [`vectorbt`](https://vectorbt.dev/). It is designed for fast personal research today, while keeping the architecture clean enough to grow into dashboards, richer experiment tracking, and production-grade workflows later.
 
 For a full technical handbook, read [DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md). That guide explains the architecture, libraries, concepts, and extension points in much more depth.
 
@@ -8,7 +8,7 @@ For the running strategy notebook, read [STRATEGY_RESEARCH_LOG.md](STRATEGY_RESE
 
 ## What It Does
 
-TradingV2 lets you:
+TradeScope lets you:
 
 - Fetch daily equity data with `yfinance`.
 - Store raw provider data and processed OHLCV data locally as Parquet.
@@ -44,7 +44,7 @@ Not currently included:
 
 ## Library-First Principle
 
-TradingV2 should stay a research shell around proven libraries, not grow into a homemade backtesting framework.
+TradeScope should stay a research shell around proven libraries, not grow into a homemade backtesting framework.
 
 Preferred responsibilities:
 
@@ -63,7 +63,7 @@ Custom code should mainly handle orchestration, strategy loading, config glue, C
 ## Repository Layout
 
 ```text
-tradingV2/
+tradescope/
   README.md
   DEVELOPMENT_GUIDE.md
   REQUIREMENTS.md
@@ -73,7 +73,7 @@ tradingV2/
   data/processed/            Normalized OHLCV data used by backtests
   results/                   Backtest outputs
   strategies/                User custom strategies
-  src/tradingv2/
+  src/tradescope/
     cli.py                   CLI entrypoint
     config/                  Pydantic config models
     data/                    Data providers, storage, validation
@@ -116,10 +116,10 @@ python -m pip install -e ".[dev,reports]"
 You can also run commands without activating the environment:
 
 ```bash
-.venv/bin/tradingv2 --help
+.venv/bin/tradescope --help
 ```
 
-All command examples in this README use `.venv/bin/tradingv2` so they work even when the virtualenv is not activated. If your virtualenv is activated, `tradingv2 ...` is equivalent.
+All command examples in this README use `.venv/bin/tradescope` so they work even when the virtualenv is not activated. If your virtualenv is activated, `tradescope ...` is equivalent.
 
 Values in angle brackets are placeholders. For example, replace `results/<run_id>` with a real run directory printed by `backtest run`, such as `results/ma_cross_spy_20260514_120000`.
 
@@ -128,31 +128,31 @@ Values in angle brackets are placeholders. For example, replace `results/<run_id
 Run a small moving-average crossover backtest:
 
 ```bash
-.venv/bin/tradingv2 backtest run --config configs/examples/ma_cross_smoke.yaml
+.venv/bin/tradescope backtest run --config configs/examples/ma_cross_smoke.yaml
 ```
 
 Inspect the output folder printed by the command:
 
 ```bash
-.venv/bin/tradingv2 results inspect results/<run_id>
+.venv/bin/tradescope results inspect results/<run_id>
 ```
 
 Run a parameter sweep:
 
 ```bash
-.venv/bin/tradingv2 backtest sweep --config configs/examples/ma_cross_sweep_smoke.yaml --top-n 5
+.venv/bin/tradescope backtest sweep --config configs/examples/ma_cross_sweep_smoke.yaml --top-n 5
 ```
 
 Show the best run from the sweep:
 
 ```bash
-.venv/bin/tradingv2 results best results/ma_cross_spy_sweep_smoke_sweep.csv
+.venv/bin/tradescope results best results/ma_cross_spy_sweep_smoke_sweep.csv
 ```
 
 Validate data for a config:
 
 ```bash
-.venv/bin/tradingv2 data validate --config configs/examples/ma_cross_smoke.yaml
+.venv/bin/tradescope data validate --config configs/examples/ma_cross_smoke.yaml
 ```
 
 ## How To Use
@@ -192,7 +192,7 @@ universe_preset.yaml       Universe preset include/exclude example
 ### 2. Run The Backtest
 
 ```bash
-.venv/bin/tradingv2 backtest run --config configs/examples/ma_cross.yaml
+.venv/bin/tradescope backtest run --config configs/examples/ma_cross.yaml
 ```
 
 Each run creates a directory under `results/`.
@@ -200,7 +200,7 @@ Each run creates a directory under `results/`.
 ### 3. Inspect The Results
 
 ```bash
-.venv/bin/tradingv2 results inspect results/<run_id>
+.venv/bin/tradescope results inspect results/<run_id>
 ```
 
 Artifacts may include:
@@ -223,13 +223,13 @@ plots/drawdown.png
 ### 4. Compare Runs
 
 ```bash
-.venv/bin/tradingv2 results compare results/<run_id_a> results/<run_id_b>
+.venv/bin/tradescope results compare results/<run_id_a> results/<run_id_b>
 ```
 
 Compare from a sweep CSV:
 
 ```bash
-.venv/bin/tradingv2 results compare \
+.venv/bin/tradescope results compare \
   --from-sweep results/ma_cross_spy_sweep_smoke_sweep.csv \
   --where param.fast_window=5
 ```
@@ -243,7 +243,7 @@ Change strategy params, execution assumptions, risk controls, or strategy logic,
 The top-level `--help` output exposes this command tree:
 
 ```text
-tradingv2
+tradescope
   backtest
     run
     split
@@ -272,8 +272,8 @@ tradingv2
 Run `--help` on any command or command group for the exact supported options:
 
 ```bash
-.venv/bin/tradingv2 backtest run --help
-.venv/bin/tradingv2 results compare --help
+.venv/bin/tradescope backtest run --help
+.venv/bin/tradescope results compare --help
 ```
 
 ### Backtest Commands
@@ -281,19 +281,19 @@ Run `--help` on any command or command group for the exact supported options:
 Run one config:
 
 ```bash
-.venv/bin/tradingv2 backtest run --config configs/examples/ma_cross.yaml
+.venv/bin/tradescope backtest run --config configs/examples/ma_cross.yaml
 ```
 
 Run a parameter sweep:
 
 ```bash
-.venv/bin/tradingv2 backtest sweep --config configs/examples/ma_cross_sweep_smoke.yaml --top-n 5
+.venv/bin/tradescope backtest sweep --config configs/examples/ma_cross_sweep_smoke.yaml --top-n 5
 ```
 
 Run train/test split backtests:
 
 ```bash
-.venv/bin/tradingv2 backtest split \
+.venv/bin/tradescope backtest split \
   --config configs/examples/ma_cross.yaml \
   --train-start 2015-01-01 \
   --train-end 2020-01-01 \
@@ -306,43 +306,43 @@ Run train/test split backtests:
 Fetch raw data and write processed data:
 
 ```bash
-.venv/bin/tradingv2 fetch --config configs/examples/ma_cross.yaml
-.venv/bin/tradingv2 data fetch --config configs/examples/ma_cross.yaml
+.venv/bin/tradescope fetch --config configs/examples/ma_cross.yaml
+.venv/bin/tradescope data fetch --config configs/examples/ma_cross.yaml
 ```
 
 Update canonical data coverage for a universe:
 
 ```bash
-.venv/bin/tradingv2 data update --config configs/examples/data_sp500_canonical.yaml
-.venv/bin/tradingv2 data update --config configs/examples/data_sp500_canonical.yaml --to-today
+.venv/bin/tradescope data update --config configs/examples/data_sp500_canonical.yaml
+.venv/bin/tradescope data update --config configs/examples/data_sp500_canonical.yaml --to-today
 ```
 
 Audit canonical data coverage and repair symbols with missing coverage or quality warnings:
 
 ```bash
-.venv/bin/tradingv2 data audit --config configs/examples/data_sp500_canonical.yaml
-.venv/bin/tradingv2 data audit --config configs/examples/data_sp500_canonical.yaml --fix
+.venv/bin/tradescope data audit --config configs/examples/data_sp500_canonical.yaml
+.venv/bin/tradescope data audit --config configs/examples/data_sp500_canonical.yaml --fix
 ```
 
 Inspect local data:
 
 ```bash
-.venv/bin/tradingv2 data inspect
-.venv/bin/tradingv2 data inspect --layer processed
-.venv/bin/tradingv2 data inspect --symbol SPY
+.venv/bin/tradescope data inspect
+.venv/bin/tradescope data inspect --layer processed
+.venv/bin/tradescope data inspect --symbol SPY
 ```
 
 Clear local data:
 
 ```bash
-.venv/bin/tradingv2 data clear-data --symbol SPY --yes
-.venv/bin/tradingv2 clear-data --layer processed --symbol SPY --yes
+.venv/bin/tradescope data clear-data --symbol SPY --yes
+.venv/bin/tradescope clear-data --layer processed --symbol SPY --yes
 ```
 
 Validate data for a config:
 
 ```bash
-.venv/bin/tradingv2 data validate --config configs/examples/ma_cross.yaml
+.venv/bin/tradescope data validate --config configs/examples/ma_cross.yaml
 ```
 
 ### Universe Commands
@@ -350,13 +350,13 @@ Validate data for a config:
 List configured universe presets:
 
 ```bash
-.venv/bin/tradingv2 universe list
+.venv/bin/tradescope universe list
 ```
 
 Show one preset's symbols:
 
 ```bash
-.venv/bin/tradingv2 universe show mega_cap_tech
+.venv/bin/tradescope universe show mega_cap_tech
 ```
 
 ### Results Commands
@@ -364,25 +364,25 @@ Show one preset's symbols:
 Show raw stats:
 
 ```bash
-.venv/bin/tradingv2 results show results/<run_id>
+.venv/bin/tradescope results show results/<run_id>
 ```
 
 Inspect one run:
 
 ```bash
-.venv/bin/tradingv2 results inspect results/<run_id>
+.venv/bin/tradescope results inspect results/<run_id>
 ```
 
 Compare saved runs:
 
 ```bash
-.venv/bin/tradingv2 results compare results/<run_id_a> results/<run_id_b>
+.venv/bin/tradescope results compare results/<run_id_a> results/<run_id_b>
 ```
 
 Compare from a sweep:
 
 ```bash
-.venv/bin/tradingv2 results compare \
+.venv/bin/tradescope results compare \
   --from-sweep results/ma_cross_spy_sweep_smoke_sweep.csv \
   --where param.fast_window=5
 ```
@@ -390,14 +390,14 @@ Compare from a sweep:
 Show the best run from a sweep:
 
 ```bash
-.venv/bin/tradingv2 results best results/ma_cross_spy_sweep_smoke_sweep.csv
-.venv/bin/tradingv2 results best results/ma_cross_spy_sweep_smoke_sweep.csv --where param.slow_window=40
+.venv/bin/tradescope results best results/ma_cross_spy_sweep_smoke_sweep.csv
+.venv/bin/tradescope results best results/ma_cross_spy_sweep_smoke_sweep.csv --where param.slow_window=40
 ```
 
 Audit saved artifacts:
 
 ```bash
-.venv/bin/tradingv2 results audit results/<run_id>
+.venv/bin/tradescope results audit results/<run_id>
 ```
 
 The audit includes signal/equity alignment, trade count consistency, positive sizes/prices, non-negative fees, closed-trade PnL math, trade date bounds, and long-only direction checks.
@@ -407,19 +407,19 @@ The audit includes signal/equity alignment, trade count consistency, positive si
 List built-in strategies:
 
 ```bash
-.venv/bin/tradingv2 strategy list
+.venv/bin/tradescope strategy list
 ```
 
 Describe a built-in strategy:
 
 ```bash
-.venv/bin/tradingv2 strategy describe ma_cross
+.venv/bin/tradescope strategy describe ma_cross
 ```
 
 Create a custom strategy template:
 
 ```bash
-.venv/bin/tradingv2 strategy init strategies/my_strategy.py
+.venv/bin/tradescope strategy init strategies/my_strategy.py
 ```
 
 ## Config Reference
@@ -486,7 +486,7 @@ data:
 
 By default, backtests use canonical coverage. That means the runner tries to maintain a broad local dataset, such as `2010-01-01` through `2026-01-01`, and each backtest receives only its requested `start` / `end` slice from that larger local file. This avoids redownloading smaller windows as research branches multiply.
 
-Processed data lookup is range-aware. If a stored file already covers the requested window, TradingV2 reuses it and slices to the requested dates. If only part of the canonical range exists, TradingV2 fetches only the missing date span, merges it with the existing processed data, and writes the broader processed file.
+Processed data lookup is range-aware. If a stored file already covers the requested window, TradeScope reuses it and slices to the requested dates. If only part of the canonical range exists, TradeScope fetches only the missing date span, merges it with the existing processed data, and writes the broader processed file.
 
 Supported `components` currently include:
 
@@ -502,7 +502,7 @@ fast_info
 
 Backtests currently require `ohlcv`. Other components are collected under `data/components` for future strategy research.
 
-If a provider returns no rows for a symbol, TradingV2 records that symbol in `data/processed/_unavailable_symbols.json`, skips it for future matching requests, and continues loading the rest of the universe.
+If a provider returns no rows for a symbol, TradeScope records that symbol in `data/processed/_unavailable_symbols.json`, skips it for future matching requests, and continues loading the rest of the universe.
 
 ### Universe
 
@@ -665,7 +665,7 @@ For now, `entries` and `exits` are the only required public strategy outputs. Si
 Create a new strategy file:
 
 ```bash
-.venv/bin/tradingv2 strategy init strategies/my_strategy.py
+.venv/bin/tradescope strategy init strategies/my_strategy.py
 ```
 
 ## Built-In Strategies
@@ -684,8 +684,8 @@ donchian   Donchian breakout
 Explore from the CLI:
 
 ```bash
-.venv/bin/tradingv2 strategy list
-.venv/bin/tradingv2 strategy describe macd
+.venv/bin/tradescope strategy list
+.venv/bin/tradescope strategy describe macd
 ```
 
 ## Development
@@ -705,29 +705,29 @@ Run lint:
 Run a smoke backtest:
 
 ```bash
-.venv/bin/tradingv2 backtest run --config configs/examples/ma_cross_smoke.yaml
+.venv/bin/tradescope backtest run --config configs/examples/ma_cross_smoke.yaml
 ```
 
 Run a risk/execution smoke backtest:
 
 ```bash
-.venv/bin/tradingv2 backtest run --config configs/examples/ma_cross_risk_smoke.yaml
+.venv/bin/tradescope backtest run --config configs/examples/ma_cross_risk_smoke.yaml
 ```
 
 Run a report smoke backtest:
 
 ```bash
-.venv/bin/tradingv2 backtest run --config configs/examples/ma_cross_report_smoke.yaml
+.venv/bin/tradescope backtest run --config configs/examples/ma_cross_report_smoke.yaml
 ```
 
 ## Troubleshooting
 
-### `tradingv2` command not found
+### `tradescope` command not found
 
 Use the venv binary directly:
 
 ```bash
-.venv/bin/tradingv2 --help
+.venv/bin/tradescope --help
 ```
 
 or reinstall editable:
@@ -749,8 +749,8 @@ PYENV_VERSION=3.12.2 python --version
 Try:
 
 ```bash
-.venv/bin/tradingv2 data clear-data --symbol SPY --yes
-.venv/bin/tradingv2 data fetch --config configs/examples/ma_cross.yaml
+.venv/bin/tradescope data clear-data --symbol SPY --yes
+.venv/bin/tradescope data fetch --config configs/examples/ma_cross.yaml
 ```
 
 Also check symbol spelling and date range.

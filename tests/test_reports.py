@@ -1,6 +1,6 @@
 import pandas as pd
 
-from tradingv2.analytics.reports import equity_to_returns
+from tradescope.analytics.reports import equity_to_returns
 
 
 def test_equity_to_returns() -> None:

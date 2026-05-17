@@ -1,6 +1,6 @@
 import pandas as pd
 
-from tradingv2.visualization import write_drawdown_plot, write_equity_plot
+from tradescope.visualization import write_drawdown_plot, write_equity_plot
 
 
 def test_write_basic_plots(tmp_path) -> None:

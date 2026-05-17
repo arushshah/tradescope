@@ -1,6 +1,6 @@
 import pytest
 
-from tradingv2.strategies.template import write_strategy_template
+from tradescope.strategies.template import write_strategy_template
 
 
 def test_write_strategy_template(tmp_path) -> None:

@@ -35,7 +35,7 @@ data/
 
 results/                    Ignored backtest outputs
 
-src/tradingv2/
+src/tradescope/
   cli.py                    Click CLI
   config/                   Pydantic config models
   data/                     Providers, parquet store, quality, maintenance
@@ -55,7 +55,7 @@ Use the project virtualenv:
 
 ```bash
 .venv/bin/python
-.venv/bin/tradingv2
+.venv/bin/tradescope
 .venv/bin/pytest
 .venv/bin/ruff
 ```
@@ -110,8 +110,8 @@ Current intended behavior:
 - Configs can request a narrow backtest window.
 - `data.coverage_start` and `data.coverage_end` define the broader local collection window.
 - Backtests should load/fetch the canonical range, then pass only the requested `start`/`end` slice to strategies.
-- `tradingv2 data update` updates canonical local data.
-- `tradingv2 data audit --fix` repairs missing coverage or quality issues.
+- `tradescope data update` updates canonical local data.
+- `tradescope data audit --fix` repairs missing coverage or quality issues.
 
 Be careful with unavailable-symbol caching. A symbol unavailable in one date range must not automatically be treated as unavailable in all ranges.
 
@@ -203,15 +203,15 @@ For code changes, run focused tests first, then the full suite when feasible:
 For CLI changes, verify help and actual execution:
 
 ```bash
-.venv/bin/tradingv2 --help
-.venv/bin/tradingv2 data --help
-.venv/bin/tradingv2 strategy list
+.venv/bin/tradescope --help
+.venv/bin/tradescope data --help
+.venv/bin/tradescope strategy list
 ```
 
 For backtest-affecting changes, audit generated runs:
 
 ```bash
-.venv/bin/tradingv2 results audit results/<run_id>
+.venv/bin/tradescope results audit results/<run_id>
 ```
 
 ## Documentation Expectations

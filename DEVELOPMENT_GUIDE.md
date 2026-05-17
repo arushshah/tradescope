@@ -1,8 +1,8 @@
-# TradingV2 Development Guide
+# TradeScope Development Guide
 
-This guide is the technical handbook for TradingV2. It assumes you are a programmer with no prior context on this repository, no prior experience with the libraries used here, and only a general interest in building a backtesting/research tool.
+This guide is the technical handbook for TradeScope. It assumes you are a programmer with no prior context on this repository, no prior experience with the libraries used here, and only a general interest in building a backtesting/research tool.
 
-TradingV2 is a CLI-first equity backtesting research tool built around `vectorbt`. It fetches market data, stores raw and processed Parquet data locally, loads strategy logic, runs portfolio simulations, saves artifacts, ranks parameter sweeps, validates data, and generates reports.
+TradeScope is a CLI-first equity backtesting research tool built around `vectorbt`. It fetches market data, stores raw and processed Parquet data locally, loads strategy logic, runs portfolio simulations, saves artifacts, ranks parameter sweeps, validates data, and generates reports.
 
 The project is deliberately library-first. The goal is not to write our own backtesting engine, indicator library, reporting engine, or dataframe system. The goal is to build a clean research shell around proven Python libraries.
 
@@ -38,7 +38,7 @@ The project is deliberately library-first. The goal is not to write our own back
 
 ## 1. Project Summary
 
-TradingV2 is a Python package and command-line tool for researching equity trading strategies.
+TradeScope is a Python package and command-line tool for researching equity trading strategies.
 
 At a high level, a user writes a YAML config like this:
 
@@ -76,10 +76,10 @@ results:
 Then runs:
 
 ```bash
-.venv/bin/tradingv2 backtest run --config configs/examples/ma_cross.yaml
+.venv/bin/tradescope backtest run --config configs/examples/ma_cross.yaml
 ```
 
-TradingV2 then:
+TradeScope then:
 
 1. Parses and validates the YAML config with Pydantic.
 2. Loads processed market data, or fetches raw data with `yfinance` and normalizes it.
@@ -90,7 +90,7 @@ TradingV2 then:
 7. Saves run artifacts under `results/<run_id>/`.
 8. Optionally creates plots and a QuantStats HTML report.
 
-TradingV2 currently focuses on daily equity data. The architecture is intentionally extensible so future markets, data providers, dashboards, and production workflows can be added later.
+TradeScope currently focuses on daily equity data. The architecture is intentionally extensible so future markets, data providers, dashboards, and production workflows can be added later.
 
 ---
 
@@ -125,7 +125,7 @@ volume number of shares/contracts traded
 
 For daily bars, one row represents one trading day.
 
-TradingV2 normalizes market data into this schema:
+TradeScope normalizes market data into this schema:
 
 ```text
 open
@@ -140,7 +140,7 @@ source
 
 ### Signals
 
-TradingV2 strategies produce signals.
+TradeScope strategies produce signals.
 
 The public strategy contract is:
 
@@ -179,7 +179,7 @@ A strategy only says when to enter and exit. A portfolio simulation decides:
 - stop loss and take profit behavior
 - how to handle multiple symbols
 
-TradingV2 delegates this work to `vectorbt.Portfolio.from_signals`.
+TradeScope delegates this work to `vectorbt.Portfolio.from_signals`.
 
 ### Fees And Slippage
 
@@ -201,7 +201,7 @@ Those are decimal percentages. `0.001` means 0.1%.
 
 Execution price determines which bar price is used for simulated orders.
 
-TradingV2 supports:
+TradeScope supports:
 
 ```yaml
 portfolio:
@@ -221,7 +221,7 @@ next_open  execute on next-bar open
 
 ### Stops
 
-TradingV2 uses vectorbt stop support:
+TradeScope uses vectorbt stop support:
 
 ```yaml
 portfolio:
@@ -235,13 +235,13 @@ portfolio:
 
 `take_profit: 0.15` means exit when the trade gains 15%.
 
-`trailing_stop: true` means the stop follows the price upward. In TradingV2, `trailing_stop` requires `stop_loss`.
+`trailing_stop: true` means the stop follows the price upward. In TradeScope, `trailing_stop` requires `stop_loss`.
 
 ---
 
 ## 3. System Architecture
 
-TradingV2 is organized into small layers:
+TradeScope is organized into small layers:
 
 ```text
 YAML config
@@ -270,7 +270,7 @@ CLI output / reports / plots
 
 The main design rule is:
 
-> TradingV2 owns orchestration. Libraries own domain-heavy work.
+> TradeScope owns orchestration. Libraries own domain-heavy work.
 
 Examples:
 
@@ -282,7 +282,7 @@ Examples:
 - `quantstats` owns HTML reports.
 - `scikit-learn` owns parameter-grid expansion.
 
-TradingV2 glue code connects those libraries.
+TradeScope glue code connects those libraries.
 
 ---
 
@@ -291,7 +291,7 @@ TradingV2 glue code connects those libraries.
 Current important files:
 
 ```text
-tradingV2/
+tradescope/
   README.md
   REQUIREMENTS.md
   DEVELOPMENT_GUIDE.md
@@ -317,7 +317,7 @@ tradingV2/
   strategies/
     example_custom.py
   src/
-    tradingv2/
+    tradescope/
       cli.py
       config/
       data/
@@ -338,65 +338,65 @@ Important sections:
 
 ```toml
 [project]
-name = "tradingv2"
+name = "tradescope"
 requires-python = ">=3.10,<3.13"
 
 [project.scripts]
-tradingv2 = "tradingv2.cli:cli"
+tradescope = "tradescope.cli:cli"
 ```
 
 That script line means this command:
 
 ```bash
-tradingv2
+tradescope
 ```
 
 runs:
 
 ```python
-tradingv2.cli:cli
+tradescope.cli:cli
 ```
 
-### `src/tradingv2/cli.py`
+### `src/tradescope/cli.py`
 
 The CLI entrypoint. It defines commands like:
 
 ```bash
-tradingv2 clear-data
-tradingv2 fetch
-tradingv2 backtest run
-tradingv2 backtest sweep
-tradingv2 backtest split
-tradingv2 data fetch
-tradingv2 data inspect
-tradingv2 data clear-data
-tradingv2 data validate
-tradingv2 results show
-tradingv2 results compare
-tradingv2 results inspect
-tradingv2 results best
-tradingv2 strategy list
-tradingv2 strategy describe
-tradingv2 strategy init
+tradescope clear-data
+tradescope fetch
+tradescope backtest run
+tradescope backtest sweep
+tradescope backtest split
+tradescope data fetch
+tradescope data inspect
+tradescope data clear-data
+tradescope data validate
+tradescope results show
+tradescope results compare
+tradescope results inspect
+tradescope results best
+tradescope strategy list
+tradescope strategy describe
+tradescope strategy init
 ```
 
-### `src/tradingv2/config/models.py`
+### `src/tradescope/config/models.py`
 
 Pydantic models for YAML configs.
 
-### `src/tradingv2/data/`
+### `src/tradescope/data/`
 
 Data provider, raw/processed storage, validation, and quality checks.
 
-### `src/tradingv2/strategies/`
+### `src/tradescope/strategies/`
 
 Built-in strategies, custom strategy loader, strategy metadata registry, and strategy template generator.
 
-### `src/tradingv2/backtesting/runner.py`
+### `src/tradescope/backtesting/runner.py`
 
 The core orchestration class. It loads data, loads a strategy, runs vectorbt, and writes artifacts.
 
-### `src/tradingv2/results/`
+### `src/tradescope/results/`
 
 Artifact writing, result comparison, sweep reading, and filtering.
 
@@ -425,7 +425,7 @@ Or use the venv commands directly without activating:
 
 ```bash
 .venv/bin/python -m pytest
-.venv/bin/tradingv2 --help
+.venv/bin/tradescope --help
 ```
 
 ### Why Editable Install?
@@ -438,7 +438,7 @@ python -m pip install -e ".[dev,reports]"
 
 installs the package in editable mode.
 
-Editable mode means changes under `src/tradingv2/` are immediately reflected when you run the CLI or tests. You do not need to reinstall after every code edit.
+Editable mode means changes under `src/tradescope/` are immediately reflected when you run the CLI or tests. You do not need to reinstall after every code edit.
 
 ### Dependency Groups
 
@@ -462,13 +462,13 @@ quantstats
 
 ## 6. Core Libraries
 
-This section introduces every major package used by TradingV2.
+This section introduces every major package used by TradeScope.
 
 ### pandas
 
 `pandas` is the dataframe library.
 
-TradingV2 uses pandas for:
+TradeScope uses pandas for:
 
 - OHLCV dataframes
 - signal matrices
@@ -499,7 +499,7 @@ prices = pd.DataFrame({
 })
 ```
 
-TradingV2 generally uses:
+TradeScope generally uses:
 
 ```text
 index   timestamp
@@ -529,7 +529,7 @@ Result:
 
 `vectorbt` is the backtesting engine.
 
-TradingV2 uses vectorbt for:
+TradeScope uses vectorbt for:
 
 - indicators such as MA, RSI, Bollinger Bands, MACD
 - portfolio simulation
@@ -574,10 +574,10 @@ macd = vbt.MACD.run(close)
 
 `yfinance` downloads market data from Yahoo Finance.
 
-TradingV2 uses it in:
+TradeScope uses it in:
 
 ```text
-src/tradingv2/data/yfinance_provider.py
+src/tradescope/data/yfinance_provider.py
 ```
 
 The provider calls:
@@ -608,7 +608,7 @@ Volume    -> volume
 
 `pydantic` validates config files.
 
-TradingV2 config classes inherit from:
+TradeScope config classes inherit from:
 
 ```python
 BaseModel
@@ -640,14 +640,14 @@ def run_backtest(config_path):
 That creates:
 
 ```bash
-tradingv2 backtest run --config ...
+tradescope backtest run --config ...
 ```
 
 ### pyarrow
 
 `pyarrow` enables pandas to read/write Parquet files.
 
-TradingV2 uses Parquet for raw and processed market data:
+TradeScope uses Parquet for raw and processed market data:
 
 ```python
 data.to_parquet(path, index=True)
@@ -658,7 +658,7 @@ Parquet is faster and more compact than CSV for structured data.
 
 ### scikit-learn
 
-TradingV2 uses one scikit-learn utility:
+TradeScope uses one scikit-learn utility:
 
 ```python
 from sklearn.model_selection import ParameterGrid
@@ -688,7 +688,7 @@ fast=20 slow=100
 
 `quantstats` generates HTML performance reports.
 
-TradingV2 calls:
+TradeScope calls:
 
 ```python
 qs.reports.html(
@@ -927,7 +927,7 @@ SPY_2023-01-01_2024-01-01_1d.parquet
 ### Data Inspection
 
 ```bash
-.venv/bin/tradingv2 data inspect
+.venv/bin/tradescope data inspect
 ```
 
 Output includes:
@@ -946,13 +946,13 @@ path
 ### Data Clearing
 
 ```bash
-.venv/bin/tradingv2 data clear-data --symbol SPY --yes
+.venv/bin/tradescope data clear-data --symbol SPY --yes
 ```
 
 ### Data Validation
 
 ```bash
-.venv/bin/tradingv2 data validate --config configs/examples/ma_cross.yaml
+.venv/bin/tradescope data validate --config configs/examples/ma_cross.yaml
 ```
 
 Checks:
@@ -1031,7 +1031,7 @@ That means strategy files are easy to write and compare.
 The runner is in:
 
 ```text
-src/tradingv2/backtesting/runner.py
+src/tradescope/backtesting/runner.py
 ```
 
 Primary class:
@@ -1236,7 +1236,7 @@ Stats come from:
 portfolio.stats()
 ```
 
-Then TradingV2 adds:
+Then TradeScope adds:
 
 ```text
 Benchmark Symbol
@@ -1258,13 +1258,13 @@ portfolio.trades.records_readable
 ### Top Level
 
 ```bash
-.venv/bin/tradingv2 --help
+.venv/bin/tradescope --help
 ```
 
 Command groups:
 
 ```text
-tradingv2
+tradescope
   backtest
     run
     split
@@ -1290,7 +1290,7 @@ tradingv2
     show
 ```
 
-All examples in this guide use `.venv/bin/tradingv2` so they execute even when the virtualenv is not activated. If the virtualenv is activated, `tradingv2 ...` is equivalent.
+All examples in this guide use `.venv/bin/tradescope` so they execute even when the virtualenv is not activated. If the virtualenv is activated, `tradescope ...` is equivalent.
 
 Values in angle brackets are placeholders. Replace `results/<run_id>` with a real run directory printed by `backtest run`.
 
@@ -1299,19 +1299,19 @@ Values in angle brackets are placeholders. Replace `results/<run_id>` with a rea
 Run one config:
 
 ```bash
-.venv/bin/tradingv2 backtest run --config configs/examples/ma_cross.yaml
+.venv/bin/tradescope backtest run --config configs/examples/ma_cross.yaml
 ```
 
 Run parameter sweep:
 
 ```bash
-.venv/bin/tradingv2 backtest sweep --config configs/examples/ma_cross_sweep_smoke.yaml --top-n 5
+.venv/bin/tradescope backtest sweep --config configs/examples/ma_cross_sweep_smoke.yaml --top-n 5
 ```
 
 Run train/test split:
 
 ```bash
-.venv/bin/tradingv2 backtest split \
+.venv/bin/tradescope backtest split \
   --config configs/examples/ma_cross_smoke.yaml \
   --train-start 2023-01-01 \
   --train-end 2023-07-01 \
@@ -1324,28 +1324,28 @@ Run train/test split:
 Fetch data:
 
 ```bash
-.venv/bin/tradingv2 fetch --config configs/examples/ma_cross.yaml
-.venv/bin/tradingv2 data fetch --config configs/examples/ma_cross.yaml
+.venv/bin/tradescope fetch --config configs/examples/ma_cross.yaml
+.venv/bin/tradescope data fetch --config configs/examples/ma_cross.yaml
 ```
 
 Inspect data:
 
 ```bash
-.venv/bin/tradingv2 data inspect
-.venv/bin/tradingv2 data inspect --layer processed
+.venv/bin/tradescope data inspect
+.venv/bin/tradescope data inspect --layer processed
 ```
 
 Clear data:
 
 ```bash
-.venv/bin/tradingv2 data clear-data --symbol SPY --yes
-.venv/bin/tradingv2 clear-data --layer processed --symbol SPY --yes
+.venv/bin/tradescope data clear-data --symbol SPY --yes
+.venv/bin/tradescope clear-data --layer processed --symbol SPY --yes
 ```
 
 Validate data:
 
 ```bash
-.venv/bin/tradingv2 data validate --config configs/examples/ma_cross.yaml
+.venv/bin/tradescope data validate --config configs/examples/ma_cross.yaml
 ```
 
 ### Universe Commands
@@ -1353,13 +1353,13 @@ Validate data:
 List presets:
 
 ```bash
-.venv/bin/tradingv2 universe list
+.venv/bin/tradescope universe list
 ```
 
 Show one preset:
 
 ```bash
-.venv/bin/tradingv2 universe show sector_etfs
+.venv/bin/tradescope universe show sector_etfs
 ```
 
 ### Results Commands
@@ -1367,25 +1367,25 @@ Show one preset:
 Show raw stats:
 
 ```bash
-.venv/bin/tradingv2 results show results/<run_id>
+.venv/bin/tradescope results show results/<run_id>
 ```
 
 Inspect run:
 
 ```bash
-.venv/bin/tradingv2 results inspect results/<run_id>
+.venv/bin/tradescope results inspect results/<run_id>
 ```
 
 Compare runs:
 
 ```bash
-.venv/bin/tradingv2 results compare results/<run_id_a> results/<run_id_b>
+.venv/bin/tradescope results compare results/<run_id_a> results/<run_id_b>
 ```
 
 Compare from sweep:
 
 ```bash
-.venv/bin/tradingv2 results compare \
+.venv/bin/tradescope results compare \
   --from-sweep results/ma_cross_spy_sweep_smoke_sweep.csv \
   --where param.fast_window=5
 ```
@@ -1393,7 +1393,7 @@ Compare from sweep:
 Best from sweep:
 
 ```bash
-.venv/bin/tradingv2 results best \
+.venv/bin/tradescope results best \
   results/ma_cross_spy_sweep_smoke_sweep.csv \
   --where param.slow_window=40
 ```
@@ -1401,7 +1401,7 @@ Best from sweep:
 Audit saved artifacts:
 
 ```bash
-.venv/bin/tradingv2 results audit results/<run_id>
+.venv/bin/tradescope results audit results/<run_id>
 ```
 
 The audit checks for required files, readable stats, nonempty and monotonic equity curves, signal/equity alignment, trade count consistency, positive sizes/prices, non-negative fees, independent closed-trade PnL math, trade date bounds, basic trade timestamp sanity, and long-only direction violations.
@@ -1411,19 +1411,19 @@ The audit checks for required files, readable stats, nonempty and monotonic equi
 List built-ins:
 
 ```bash
-.venv/bin/tradingv2 strategy list
+.venv/bin/tradescope strategy list
 ```
 
 Describe built-in:
 
 ```bash
-.venv/bin/tradingv2 strategy describe macd
+.venv/bin/tradescope strategy describe macd
 ```
 
 Create template:
 
 ```bash
-.venv/bin/tradingv2 strategy init strategies/my_strategy.py
+.venv/bin/tradescope strategy init strategies/my_strategy.py
 ```
 
 ---
@@ -1433,37 +1433,37 @@ Create template:
 ### Workflow 1: Run A Smoke Backtest
 
 ```bash
-.venv/bin/tradingv2 backtest run --config configs/examples/ma_cross_smoke.yaml
+.venv/bin/tradescope backtest run --config configs/examples/ma_cross_smoke.yaml
 ```
 
 Then inspect:
 
 ```bash
-.venv/bin/tradingv2 results inspect results/<run_id>
+.venv/bin/tradescope results inspect results/<run_id>
 ```
 
 ### Workflow 2: Run A Sweep
 
 ```bash
-.venv/bin/tradingv2 backtest sweep --config configs/examples/ma_cross_sweep_smoke.yaml --top-n 5
+.venv/bin/tradescope backtest sweep --config configs/examples/ma_cross_sweep_smoke.yaml --top-n 5
 ```
 
 Find best:
 
 ```bash
-.venv/bin/tradingv2 results best results/ma_cross_spy_sweep_smoke_sweep.csv
+.venv/bin/tradescope results best results/ma_cross_spy_sweep_smoke_sweep.csv
 ```
 
 Filter:
 
 ```bash
-.venv/bin/tradingv2 results best results/ma_cross_spy_sweep_smoke_sweep.csv --where param.slow_window=40
+.venv/bin/tradescope results best results/ma_cross_spy_sweep_smoke_sweep.csv --where param.slow_window=40
 ```
 
 ### Workflow 3: Generate Report
 
 ```bash
-.venv/bin/tradingv2 backtest run --config configs/examples/ma_cross_report_smoke.yaml
+.venv/bin/tradescope backtest run --config configs/examples/ma_cross_report_smoke.yaml
 ```
 
 Open:
@@ -1475,7 +1475,7 @@ results/<run_id>/report.html
 ### Workflow 4: Create A Custom Strategy
 
 ```bash
-.venv/bin/tradingv2 strategy init strategies/my_strategy.py
+.venv/bin/tradescope strategy init strategies/my_strategy.py
 ```
 
 Edit it.
@@ -1492,7 +1492,7 @@ strategy:
 Run:
 
 ```bash
-.venv/bin/tradingv2 backtest run --config configs/my_strategy.yaml
+.venv/bin/tradescope backtest run --config configs/my_strategy.yaml
 ```
 
 ---
@@ -1502,7 +1502,7 @@ Run:
 Start with:
 
 ```bash
-.venv/bin/tradingv2 strategy init strategies/my_strategy.py
+.venv/bin/tradescope strategy init strategies/my_strategy.py
 ```
 
 Template:
@@ -1706,7 +1706,7 @@ strategy:
       - 40
 ```
 
-TradingV2 uses:
+TradeScope uses:
 
 ```python
 sklearn.model_selection.ParameterGrid
@@ -1717,7 +1717,7 @@ to expand all combinations.
 Command:
 
 ```bash
-.venv/bin/tradingv2 backtest sweep --config configs/examples/ma_cross_sweep_smoke.yaml
+.venv/bin/tradescope backtest sweep --config configs/examples/ma_cross_sweep_smoke.yaml
 ```
 
 Outputs:
@@ -1736,7 +1736,7 @@ Train/test split helps reduce overfitting.
 Command:
 
 ```bash
-.venv/bin/tradingv2 backtest split \
+.venv/bin/tradescope backtest split \
   --config configs/examples/ma_cross_smoke.yaml \
   --train-start 2023-01-01 \
   --train-end 2023-07-01 \
@@ -1764,25 +1764,25 @@ results/<name>_split.csv
 ### Inspect Data
 
 ```bash
-.venv/bin/tradingv2 data inspect
+.venv/bin/tradescope data inspect
 ```
 
 ### Clear Data
 
 ```bash
-.venv/bin/tradingv2 data clear-data --symbol SPY --yes
+.venv/bin/tradescope data clear-data --symbol SPY --yes
 ```
 
 ### Validate Config Data
 
 ```bash
-.venv/bin/tradingv2 data validate --config configs/examples/ma_cross.yaml
+.venv/bin/tradescope data validate --config configs/examples/ma_cross.yaml
 ```
 
 Quality reports are built in:
 
 ```text
-src/tradingv2/data/quality.py
+src/tradescope/data/quality.py
 ```
 
 ---
@@ -1791,7 +1791,7 @@ src/tradingv2/data/quality.py
 
 ### PNG Plots
 
-TradingV2 writes:
+TradeScope writes:
 
 ```text
 plots/equity_curve.png
@@ -1871,7 +1871,7 @@ Current tests cover:
 
 ### Import Errors
 
-If `tradingv2` is not found:
+If `tradescope` is not found:
 
 ```bash
 .venv/bin/python -m pip install -e ".[dev,reports]"
@@ -1891,7 +1891,7 @@ If yfinance returns empty data:
 4. Delete stale stored data.
 
 ```bash
-.venv/bin/tradingv2 data clear-data --symbol SPY --yes
+.venv/bin/tradescope data clear-data --symbol SPY --yes
 ```
 
 ### Empty Backtest / Zero Trades
@@ -1944,7 +1944,7 @@ Then update `BacktestRunner._load_data` to route to the provider.
 1. Create:
 
 ```text
-src/tradingv2/strategies/builtin/my_strategy.py
+src/tradescope/strategies/builtin/my_strategy.py
 ```
 
 2. Define:
@@ -1957,13 +1957,13 @@ def generate_signals(data, params):
 3. Register in:
 
 ```text
-src/tradingv2/strategies/builtin/__init__.py
+src/tradescope/strategies/builtin/__init__.py
 ```
 
 4. Add metadata in:
 
 ```text
-src/tradingv2/strategies/registry.py
+src/tradescope/strategies/registry.py
 ```
 
 5. Add tests in:
@@ -1979,7 +1979,7 @@ tests/test_strategies.py
 Commands live in:
 
 ```text
-src/tradingv2/cli.py
+src/tradescope/cli.py
 ```
 
 Use Click decorators:
@@ -1997,7 +1997,7 @@ Keep CLI commands thin. Put reusable logic in modules.
 Add write method to:
 
 ```text
-src/tradingv2/results/store.py
+src/tradescope/results/store.py
 ```
 
 Call it from:
@@ -2018,7 +2018,7 @@ if users should see it.
 
 ## 24. Current Limitations
 
-TradingV2 is useful, but still early.
+TradeScope is useful, but still early.
 
 Known limitations:
 
@@ -2094,7 +2094,7 @@ Short-side support should be introduced intentionally, not casually.
 
 ## Mental Model For Development
 
-When modifying TradingV2, ask:
+When modifying TradeScope, ask:
 
 1. Is there an existing library that should do this?
 2. Is this domain logic or orchestration glue?

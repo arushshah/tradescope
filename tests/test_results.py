@@ -1,8 +1,8 @@
 import pandas as pd
 
-from tradingv2.results.compare import apply_filters, best_run_from_sweep
-from tradingv2.results.store import ResultStore
-from tradingv2.results.compare import display_columns, rank_results
+from tradescope.results.compare import apply_filters, best_run_from_sweep
+from tradescope.results.store import ResultStore
+from tradescope.results.compare import display_columns, rank_results
 
 
 def test_rank_results() -> None:

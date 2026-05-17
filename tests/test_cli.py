@@ -1,6 +1,6 @@
 from click.testing import CliRunner
 
-from tradingv2.cli import cli
+from tradescope.cli import cli
 
 
 def test_top_level_help_lists_documented_commands():

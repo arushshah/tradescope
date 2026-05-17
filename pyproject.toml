@@ -3,7 +3,7 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tradingv2"
+name = "tradescope"
 version = "0.1.0"
 description = "CLI-first vectorbt backtesting research toolkit."
 readme = "README.md"
@@ -30,7 +30,7 @@ reports = [
   "quantstats>=0.0.62",
 ]
 [project.scripts]
-tradingv2 = "tradingv2.cli:cli"
+tradescope = "tradescope.cli:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]

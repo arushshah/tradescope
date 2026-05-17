@@ -1,12 +1,12 @@
 import pandas as pd
 import pytest
 
-from tradingv2.backtesting.runner import BacktestRunner, make_close_matrix
-from tradingv2.backtesting.runner import validate_signals
-from tradingv2.config import load_config
-from tradingv2.data.store import MarketDataStore
-from tradingv2.data.yfinance_provider import YFinanceProvider
-from tradingv2.exceptions import DataError, NoDataError, StrategyError
+from tradescope.backtesting.runner import BacktestRunner, make_close_matrix
+from tradescope.backtesting.runner import validate_signals
+from tradescope.config import load_config
+from tradescope.data.store import MarketDataStore
+from tradescope.data.yfinance_provider import YFinanceProvider
+from tradescope.exceptions import DataError, NoDataError, StrategyError
 
 
 def test_equal_weight_sizing() -> None:

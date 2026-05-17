@@ -1,5 +1,5 @@
-from tradingv2.backtesting.optimization import expand_param_grid
-from tradingv2.config import load_config
+from tradescope.backtesting.optimization import expand_param_grid
+from tradescope.config import load_config
 
 
 def test_expand_param_grid() -> None:

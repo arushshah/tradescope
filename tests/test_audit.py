@@ -1,9 +1,9 @@
 import pandas as pd
 
-from tradingv2.backtesting.runner import BacktestRunner
-from tradingv2.config import load_config
-from tradingv2.data.store import MarketDataStore
-from tradingv2.results.audit import audit_run
+from tradescope.backtesting.runner import BacktestRunner
+from tradescope.config import load_config
+from tradescope.data.store import MarketDataStore
+from tradescope.results.audit import audit_run
 
 
 def test_audit_passes_clean_run(tmp_path) -> None:

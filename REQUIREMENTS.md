@@ -1,4 +1,4 @@
-# TradingV2 Backtesting Tool Requirements
+# TradeScope Backtesting Tool Requirements
 
 ## Product Goal
 
@@ -6,7 +6,7 @@ Build a fast, extensible backtesting and research tool for equities using `vecto
 
 ## Initial Scope
 
-TradingV2 starts as a CLI-driven Python research tool. It should make it easy to fetch equity data, plug in custom strategy logic, run repeatable vectorbt backtests, compare results, and save artifacts for later analysis.
+TradeScope starts as a CLI-driven Python research tool. It should make it easy to fetch equity data, plug in custom strategy logic, run repeatable vectorbt backtests, compare results, and save artifacts for later analysis.
 
 The first implementation should prioritize a clean core architecture over a polished UI. Dashboards and production concerns should be anticipated in the design, but not allowed to slow the MVP.
 
@@ -40,11 +40,11 @@ The first interface is a CLI.
 Expected command families:
 
 ```bash
-tradingv2 data fetch
-tradingv2 backtest run
-tradingv2 backtest sweep
-tradingv2 results show
-tradingv2 results compare
+tradescope data fetch
+tradescope backtest run
+tradescope backtest sweep
+tradescope results show
+tradescope results compare
 ```
 
 The CLI should accept config files so experiments are reproducible.
@@ -52,7 +52,7 @@ The CLI should accept config files so experiments are reproducible.
 Example:
 
 ```bash
-tradingv2 backtest run --config configs/examples/ma_cross.yaml
+tradescope backtest run --config configs/examples/ma_cross.yaml
 ```
 
 ### Future Interface
@@ -164,7 +164,7 @@ The CLI should support loading custom strategies from a Python path.
 Example:
 
 ```bash
-tradingv2 backtest run \
+tradescope backtest run \
   --strategy-path strategies/my_strategy.py \
   --config configs/my_strategy.yaml
 ```
@@ -355,7 +355,7 @@ Proposed package layout:
 
 ```text
 src/
-  tradingv2/
+  tradescope/
     cli.py
     config/
     data/
