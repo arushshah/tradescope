@@ -20,7 +20,7 @@ def test_command_group_help_lists_documented_subcommands():
     runner = CliRunner()
     expected = {
         "backtest": ["run", "split", "sweep"],
-        "data": ["audit", "clear", "fetch", "inspect", "securities", "update", "validate"],
+        "data": ["audit", "clear", "collect-securities", "fetch", "inspect", "securities", "update", "validate"],
         "results": ["audit", "best", "compare", "inspect", "show"],
         "strategy": ["describe", "init", "list"],
         "universe": ["list", "show"],
@@ -186,6 +186,76 @@ def test_data_securities_ingests_alpha_vantage_listing_status(tmp_path, monkeypa
     assert show_result.exit_code == 0
     assert "ACTIVE1" in show_result.output
     assert "DELISTED1" in show_result.output
+
+
+def test_data_collect_securities_fetches_from_security_master(tmp_path, monkeypatch):
+    store = MarketDataStore(tmp_path / "raw", tmp_path / "processed")
+    store.security_master.upsert_listing_status(
+        [
+            ListingStatusRecord(
+                symbol="SPY",
+                name="SPDR S&P 500 ETF",
+                exchange="NYSE ARCA",
+                asset_type="Stock",
+                ipo_date="1993-01-29",
+                delisting_date=None,
+                status="active",
+                source="alpha_vantage_listing_status",
+                as_of_date=None,
+            )
+        ]
+    )
+
+    def fake_update_symbols_dataset(**kwargs):
+        assert kwargs["symbols"] == ["SPY"]
+        assert kwargs["start"] == pd.Timestamp("2024-01-01").date()
+        assert kwargs["end"] == pd.Timestamp("2024-01-03").date()
+
+        class Config:
+            name = "security_master_collection"
+            symbols = ["SPY"]
+            start = kwargs["start"]
+            end = kwargs["end"]
+            interval = kwargs["interval"]
+
+            class Data:
+                provider = "yfinance"
+                raw_dir = tmp_path / "raw"
+                processed_dir = tmp_path / "processed"
+                component_dir = tmp_path / "components"
+                coverage_start = kwargs["start"]
+                coverage_end = kwargs["end"]
+                components = kwargs["components"]
+
+            data = Data()
+
+        return Config(), {"ohlcv_symbols": 1, "component_files": 0}
+
+    monkeypatch.setattr("tradescope.cli.update_symbols_dataset", fake_update_symbols_dataset)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "data",
+            "collect-securities",
+            "--processed-dir",
+            str(tmp_path / "processed"),
+            "--raw-dir",
+            str(tmp_path / "raw"),
+            "--component-dir",
+            str(tmp_path / "components"),
+            "--start",
+            "2024-01-01",
+            "--end",
+            "2024-01-03",
+            "--limit",
+            "1",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Matched security master symbol(s): 1" in result.output
+    assert "Updated OHLCV for 1 symbol(s)" in result.output
 
 
 def test_universe_commands_show_presets():

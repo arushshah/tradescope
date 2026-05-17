@@ -139,6 +139,34 @@ class SecurityMaster:
             return pd.DataFrame(columns=columns)
         return pd.DataFrame(records.values()).sort_values(["provider", "symbol"]).reset_index(drop=True)
 
+    def symbols(
+        self,
+        statuses: list[str] | None = None,
+        exchanges: list[str] | None = None,
+        asset_types: list[str] | None = None,
+        source: str | None = None,
+        limit: int | None = None,
+    ) -> list[str]:
+        frame = self.read()
+        if frame.empty:
+            return []
+        filtered = frame
+        if statuses:
+            allowed = {status.lower() for status in statuses}
+            filtered = filtered[filtered["status"].str.lower().isin(allowed)]
+        if exchanges:
+            allowed = {exchange.upper() for exchange in exchanges}
+            filtered = filtered[filtered["exchange"].fillna("").str.upper().isin(allowed)]
+        if asset_types:
+            allowed = {asset_type.lower() for asset_type in asset_types}
+            filtered = filtered[filtered["asset_type"].fillna("").str.lower().isin(allowed)]
+        if source:
+            filtered = filtered[filtered["listing_source"] == source]
+        symbols = filtered["symbol"].dropna().drop_duplicates().sort_values().tolist()
+        if limit is not None:
+            symbols = symbols[:limit]
+        return symbols
+
     def _read_records(self) -> dict[str, dict]:
         if not self.path.exists():
             return {}

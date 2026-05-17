@@ -252,6 +252,7 @@ tradescope
   data
     audit
     clear
+    collect-securities
     fetch
     inspect
     securities
@@ -331,6 +332,14 @@ Update every processed OHLCV dataset already stored locally:
 ```
 
 Every fetch/update writes a JSON manifest under `data/manifests`, recording the config, coverage window, requested symbol count, component list, loaded/skipped counts, unavailable symbols, and security-status summary.
+
+Collect market data for symbols selected from the security master:
+
+```bash
+.venv/bin/tradescope data collect-securities
+.venv/bin/tradescope data collect-securities --status delisted --limit 100
+.venv/bin/tradescope data collect-securities --exchange NASDAQ --asset-type Stock
+```
 
 Audit canonical data coverage and repair symbols with missing coverage or quality warnings:
 

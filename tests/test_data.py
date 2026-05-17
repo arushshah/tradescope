@@ -9,7 +9,11 @@ from tradescope.data.collection_manifest import (
 )
 from tradescope.data.alpha_vantage import ListingStatusRecord, parse_listing_status_csv
 from tradescope.data.quality import build_quality_report
-from tradescope.data.maintenance import fetch_configured_components, update_stored_dataset
+from tradescope.data.maintenance import (
+    fetch_configured_components,
+    update_stored_dataset,
+    update_symbols_dataset,
+)
 from tradescope.config import load_config
 from tradescope.data.store import MarketDataStore
 from tradescope.data.yfinance_provider import (
@@ -230,6 +234,7 @@ def test_security_master_upserts_alpha_vantage_listing_status(tmp_path) -> None:
     assert security_master.loc[0, "name"] == "Old Co"
     assert security_master.loc[0, "delisting_date"] == "2020-01-01"
     assert security_master.loc[0, "listing_source"] == "alpha_vantage_listing_status"
+    assert store.security_master.symbols(statuses=["delisted"], exchanges=["NYSE"]) == ["OLD"]
 
 
 def test_parse_alpha_vantage_listing_status_csv() -> None:
@@ -248,6 +253,42 @@ def test_parse_alpha_vantage_listing_status_csv() -> None:
     assert records[0].status == "Active"
     assert records[0].delisting_date is None
     assert records[1].delisting_date == "2020-01-01"
+
+
+def test_update_symbols_dataset_fetches_arbitrary_security_master_symbols(tmp_path, monkeypatch) -> None:
+    def fake_fetch_raw(_self, symbols, start, end, interval):
+        assert symbols == ["SPY"]
+        assert start == date(2024, 1, 1)
+        assert end == date(2024, 1, 3)
+        assert interval == "1d"
+        return {
+            "SPY": pd.DataFrame(
+                {
+                    "Open": [1.0, 2.0],
+                    "High": [2.0, 3.0],
+                    "Low": [0.5, 1.5],
+                    "Close": [1.5, 2.5],
+                    "Adj Close": [1.5, 2.5],
+                    "Volume": [100, 100],
+                },
+                index=pd.date_range("2024-01-01", "2024-01-02", freq="D", name="timestamp"),
+            )
+        }
+
+    monkeypatch.setattr("tradescope.data.yfinance_provider.YFinanceProvider.fetch_raw", fake_fetch_raw)
+
+    _config, counts = update_symbols_dataset(
+        symbols=["SPY"],
+        start=date(2024, 1, 1),
+        end=date(2024, 1, 3),
+        interval="1d",
+        raw_dir=tmp_path / "raw",
+        processed_dir=tmp_path / "processed",
+        component_dir=tmp_path / "components",
+        components=["ohlcv"],
+    )
+
+    assert counts == {"ohlcv_symbols": 1, "component_files": 0}
 
 
 def test_fetch_configured_components_skips_existing_components(tmp_path, monkeypatch) -> None:

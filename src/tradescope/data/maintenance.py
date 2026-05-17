@@ -9,7 +9,7 @@ from operator import attrgetter
 import pandas as pd
 
 from tradescope.backtesting.runner import BacktestRunner
-from tradescope.config import BacktestConfig
+from tradescope.config import BacktestConfig, DataConfig, PortfolioConfig, ResultsConfig, StrategyConfig
 from tradescope.data.quality import DataQualityReport, build_quality_report
 from tradescope.data.store import MarketDataStore
 from tradescope.data.store import combine_frames, entry_end_date, entry_start_date
@@ -61,6 +61,43 @@ def update_dataset(config: BacktestConfig, end: date | None = None) -> dict[str,
     loaded = BacktestRunner(updated)._load_data()
     component_count = fetch_configured_components(updated)
     return {"ohlcv_symbols": len(loaded), "component_files": component_count}
+
+
+def update_symbols_dataset(
+    symbols: list[str],
+    start: date,
+    end: date | None,
+    interval: str,
+    raw_dir,
+    processed_dir,
+    component_dir,
+    provider: str = "yfinance",
+    components: list[str] | None = None,
+    refresh: bool = False,
+    name: str = "security_master_collection",
+) -> tuple[BacktestConfig, dict[str, int]]:
+    config = BacktestConfig(
+        name=name,
+        symbols=symbols,
+        start=start,
+        end=end,
+        interval=interval,
+        data=DataConfig(
+            provider=provider,
+            raw_dir=raw_dir,
+            processed_dir=processed_dir,
+            component_dir=component_dir,
+            refresh=refresh,
+            use_canonical_coverage=True,
+            coverage_start=start,
+            coverage_end=end,
+            components=components or ["ohlcv"],
+        ),
+        strategy=StrategyConfig(name="buy_hold"),
+        portfolio=PortfolioConfig(benchmark=None),
+        results=ResultsConfig(save_trades=False, save_equity_curve=False, save_plots=False),
+    )
+    return config, update_dataset(config, end=end)
 
 
 def update_stored_dataset(

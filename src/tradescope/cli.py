@@ -25,6 +25,7 @@ from tradescope.data.maintenance import (
     stored_rows_needing_repair,
     symbols_needing_repair,
     update_dataset,
+    update_symbols_dataset,
     update_stored_dataset,
 )
 from tradescope.data.quality import build_quality_report, reports_to_frame
@@ -264,6 +265,75 @@ def update_data(
     end = end_date or (default_update_end() if to_today else None)
     counts = update_dataset(config, end=end)
     manifest_path = write_config_collection_manifest(config, counts, config_path=config_path)
+    click.echo(f"Updated OHLCV for {counts['ohlcv_symbols']} symbol(s)")
+    if counts["component_files"]:
+        click.echo(f"Updated {counts['component_files']} component file(s)")
+    click.echo(f"Manifest: {manifest_path}")
+
+
+@data.command("collect-securities")
+@click.option(
+    "--processed-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/processed"),
+    show_default=True,
+)
+@click.option("--raw-dir", type=click.Path(file_okay=False, path_type=Path), default=Path("data/raw"), show_default=True)
+@click.option(
+    "--component-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data/components"),
+    show_default=True,
+)
+@click.option("--status", multiple=True, default=["active"], show_default=True)
+@click.option("--exchange", multiple=True, help="Only collect securities on these exchanges.")
+@click.option("--asset-type", multiple=True, default=["Stock"], show_default=True)
+@click.option("--source", default="alpha_vantage_listing_status", show_default=True)
+@click.option("--start", "start_date", default="2010-01-01", show_default=True)
+@click.option("--end", "end_date", default="2026-01-01", show_default=True)
+@click.option("--interval", default="1d", show_default=True)
+@click.option("--component", "components", multiple=True, default=["ohlcv", "research_bundle"], show_default=True)
+@click.option("--limit", type=click.IntRange(min=1), help="Collect only the first N matching symbols.")
+@click.option("--refresh", is_flag=True, help="Refetch existing data and components.")
+def collect_securities(
+    processed_dir: Path,
+    raw_dir: Path,
+    component_dir: Path,
+    status: tuple[str, ...],
+    exchange: tuple[str, ...],
+    asset_type: tuple[str, ...],
+    source: str,
+    start_date: str,
+    end_date: str,
+    interval: str,
+    components: tuple[str, ...],
+    limit: int | None,
+    refresh: bool,
+) -> None:
+    """Collect market data for securities from the security master."""
+    master = SecurityMaster(default_security_master_path(processed_dir))
+    symbols = master.symbols(
+        statuses=list(status),
+        exchanges=list(exchange) or None,
+        asset_types=list(asset_type) or None,
+        source=source,
+        limit=limit,
+    )
+    if not symbols:
+        raise click.ClickException("no matching securities found in security master")
+    config, counts = update_symbols_dataset(
+        symbols=symbols,
+        start=date.fromisoformat(start_date),
+        end=date.fromisoformat(end_date),
+        interval=interval,
+        raw_dir=raw_dir,
+        processed_dir=processed_dir,
+        component_dir=component_dir,
+        components=list(components),
+        refresh=refresh,
+    )
+    manifest_path = write_config_collection_manifest(config, counts)
+    click.echo(f"Matched security master symbol(s): {len(symbols)}")
     click.echo(f"Updated OHLCV for {counts['ohlcv_symbols']} symbol(s)")
     if counts["component_files"]:
         click.echo(f"Updated {counts['component_files']} component file(s)")
